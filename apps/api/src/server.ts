@@ -212,7 +212,7 @@ process.on('SIGINT',  () => shutdown('SIGINT'))
   const ikCols = await publicDb.$queryRawUnsafe<{column_name:string}[]>(
     `SELECT column_name FROM information_schema.columns WHERE table_name='idempotency_keys' AND table_schema='public'`
   )
-  const ikColNames = ikCols.map(c => c.column_name)
+  const ikColNames = ikCols.map((c: { column_name: string }) => c.column_name)
   const requiredIkCols = ['branch_id','endpoint','idempotency_key','response_status','response_body','completed_at']
   if (ikColNames.length > 0 && requiredIkCols.some(c => !ikColNames.includes(c))) {
     await publicDb.$executeRawUnsafe(`DROP TABLE IF EXISTS idempotency_keys`)
