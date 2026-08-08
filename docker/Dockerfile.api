@@ -1,0 +1,27 @@
+FROM node:22-alpine
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@9 --activate
+
+# Copy workspace manifests first for better layer caching
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/db/package.json         packages/db/
+COPY packages/shared/package.json     packages/shared/
+COPY packages/gst-engine/package.json packages/gst-engine/
+COPY packages/domain-registry/package.json packages/domain-registry/
+COPY packages/pdf/package.json        packages/pdf/
+COPY apps/api/package.json            apps/api/
+
+RUN pnpm install --frozen-lockfile
+
+# Copy source
+COPY tsconfig.base.json ./
+COPY packages/ packages/
+COPY apps/api/ apps/api/
+
+# Generate Prisma client
+RUN pnpm --filter @billing/db exec prisma generate
+
+EXPOSE 3000
+
+CMD ["node", "node_modules/.bin/tsx", "apps/api/src/server.ts"]

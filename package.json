@@ -1,0 +1,32 @@
+{
+  "name": "hotel-platform",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:migrate": "pnpm --filter @billing/db migrate:dev",
+    "db:migrate:prod": "pnpm --filter @billing/db migrate:prod",
+    "db:seed": "pnpm --filter @billing/db seed",
+    "db:reset": "pnpm --filter @billing/db reset",
+    "db:studio": "pnpm --filter @billing/db studio",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "postinstall": "node scripts/fix-workspace-links.mjs"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.0",
+    "prettier": "^3.3.0",
+    "eslint": "^9.6.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.5.0"
+}

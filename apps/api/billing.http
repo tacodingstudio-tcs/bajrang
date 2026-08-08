@@ -1,0 +1,329 @@
+### billing-platform API tests
+### Use the VS Code "REST Client" extension to run these.
+### Install: ext install humao.rest-client
+### Set @token from the login response's accessToken field.
+### Set @refreshToken from the login response's refreshToken field
+### (needed for the /auth/refresh and /auth/logout requests below).
+
+@base = http://localhost:3000
+@token = PASTE_ACCESS_TOKEN_HERE_AFTER_LOGIN
+@refreshToken = PASTE_REFRESH_TOKEN_HERE_AFTER_LOGIN
+
+# =============================================================================
+# AUTH
+# =============================================================================
+
+### Register a new business
+POST {{base}}/api/tenants/register
+Content-Type: application/json
+
+{
+  "businessName": "Test Kirana Store",
+  "ownerName": "Test Owner",
+  "phone": "9000000001",
+  "pin": "1234",
+  "domainType": "retail",
+  "stateCode": "24"
+}
+
+###
+
+### Login (use seed data: phone 9876543210, pin 1111)
+### Response now includes BOTH accessToken (15min) and refreshToken (30d).
+### Copy both into the @token / @refreshToken variables above.
+# @name login
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{
+  "phone": "9876543210",
+  "pin": "1111"
+}
+
+###
+
+### Refresh — exchange the refresh token for a new access token + new refresh token.
+### Note: the OLD refreshToken is invalidated the instant this runs (rotation).
+### Update @refreshToken with the NEW value from the response before running again.
+POST {{base}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+###
+
+### Logout — revokes the refresh token server-side
+POST {{base}}/api/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+###
+
+### Logout from all devices (requires valid access token)
+POST {{base}}/api/auth/logout-all-devices
+Authorization: Bearer {{token}}
+
+###
+
+### Health check (no auth)
+GET {{base}}/health
+
+# =============================================================================
+# PRODUCTS
+# =============================================================================
+
+### List all products
+GET {{base}}/api/products
+Authorization: Bearer {{token}}
+
+###
+
+### Search products by name (fuzzy)
+GET {{base}}/api/products?q=amul
+Authorization: Bearer {{token}}
+
+###
+
+### Barcode scan
+GET {{base}}/api/products/barcode/8901030000001
+Authorization: Bearer {{token}}
+
+###
+
+### Low stock alerts
+GET {{base}}/api/products/low-stock
+Authorization: Bearer {{token}}
+
+###
+
+### Create a product
+POST {{base}}/api/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Parle-G Biscuit 100g",
+  "nameLocal": "पारले-जी बिस्किट",
+  "barcode": "8901719110019",
+  "hsnSacCode": "19053100",
+  "gstRate": 18,
+  "unit": "pcs",
+  "purchasePrice": 8,
+  "salePrice": 10,
+  "mrp": 10,
+  "trackStock": true,
+  "lowStockQty": 10,
+  "domainAttrs": {
+    "brand": "Parle",
+    "pack_size": "100g",
+    "reorder_qty": 50
+  },
+  "openingStock": 100,
+  "openingRate": 8
+}
+
+###
+
+### Suggest HSN code for a product
+POST {{base}}/api/products/REPLACE_WITH_PRODUCT_ID/suggest-hsn
+Authorization: Bearer {{token}}
+
+###
+
+### Confirm HSN suggestion
+POST {{base}}/api/products/REPLACE_WITH_PRODUCT_ID/confirm-hsn
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "hsnCode": "19053100",
+  "gstRate": 18
+}
+
+###
+
+### Manual stock adjustment
+POST {{base}}/api/products/REPLACE_WITH_PRODUCT_ID/stock-adjustment
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "qty": -5,
+  "reason": "Damaged goods",
+  "notes": "Water damage in storage"
+}
+
+# =============================================================================
+# PARTIES
+# =============================================================================
+
+### List customers
+GET {{base}}/api/parties?type=customer
+Authorization: Bearer {{token}}
+
+###
+
+### Udhaar list (customers with outstanding balance)
+GET {{base}}/api/parties?type=customer&hasDebt=true
+Authorization: Bearer {{token}}
+
+###
+
+### Udhaar summary
+GET {{base}}/api/parties/udhaar/summary
+Authorization: Bearer {{token}}
+
+###
+
+### Create a customer
+POST {{base}}/api/parties
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "type": "customer",
+  "name": "Suresh Kumar",
+  "phone": "9712345679",
+  "address": {
+    "city": "Vadodara",
+    "state": "Gujarat",
+    "stateCode": "24"
+  },
+  "creditLimit": 2000
+}
+
+###
+
+### Party statement (ledger)
+GET {{base}}/api/parties/REPLACE_WITH_PARTY_ID/statement
+Authorization: Bearer {{token}}
+
+# =============================================================================
+# INVOICES
+# =============================================================================
+
+### Create a sale invoice
+POST {{base}}/api/invoices
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "txnType": "sale_invoice",
+  "partyId": "REPLACE_WITH_PARTY_ID",
+  "items": [
+    {
+      "description": "Amul Butter 100g",
+      "qty": 2,
+      "rate": 55,
+      "discountPct": 0,
+      "gstRate": 12,
+      "unit": "pcs"
+    },
+    {
+      "description": "Tata Salt 1kg",
+      "qty": 1,
+      "rate": 22,
+      "discountPct": 0,
+      "gstRate": 0,
+      "unit": "pcs"
+    }
+  ],
+  "domainData": {
+    "is_udhaar": false,
+    "source": "pos"
+  }
+}
+
+###
+
+### Idempotency test — run this exact request TWICE with the same key.
+### First run creates the invoice. Second run returns the SAME invoice
+### (check the X-Idempotent-Replay: true response header) instead of
+### creating a duplicate. Change the key value to test a fresh request.
+POST {{base}}/api/invoices
+Authorization: Bearer {{token}}
+Content-Type: application/json
+Idempotency-Key: test-key-001
+
+{
+  "txnType": "sale_invoice",
+  "items": [
+    { "description": "Idempotency test item", "qty": 1, "rate": 100, "gstRate": 18 }
+  ]
+}
+
+###
+
+### Cash / walk-in sale (no partyId)
+POST {{base}}/api/invoices
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "txnType": "sale_invoice",
+  "items": [
+    {
+      "description": "Parle-G Biscuit 100g",
+      "qty": 3,
+      "rate": 10,
+      "gstRate": 18
+    }
+  ]
+}
+
+###
+
+### List invoices (today's sales)
+GET {{base}}/api/invoices?txnType=sale_invoice&status=confirmed
+Authorization: Bearer {{token}}
+
+###
+
+### Daily summary (Z-report)
+GET {{base}}/api/invoices/summary/daily
+Authorization: Bearer {{token}}
+
+###
+
+### Get invoice detail
+GET {{base}}/api/invoices/REPLACE_WITH_INVOICE_ID
+Authorization: Bearer {{token}}
+
+###
+
+### Record payment against invoice
+POST {{base}}/api/invoices/REPLACE_WITH_INVOICE_ID/payment
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "amount": 100,
+  "method": "upi",
+  "refNo": "UPI-20250614-123456"
+}
+
+###
+
+### Generate a Razorpay payment link for outstanding balance
+### Requires RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET set in .env (test mode keys are fine)
+POST {{base}}/api/invoices/REPLACE_WITH_INVOICE_ID/payment-link
+Authorization: Bearer {{token}}
+
+###
+
+### Cancel an invoice
+POST {{base}}/api/invoices/REPLACE_WITH_INVOICE_ID/cancel
+Authorization: Bearer {{token}}
+
+# =============================================================================
+# STOCK
+# =============================================================================
+
+### Current stock levels for all products
+GET {{base}}/api/stock
+Authorization: Bearer {{token}}

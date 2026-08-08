@@ -1,0 +1,5 @@
+data/*.jsonl
+hisabkitab-model/
+__pycache__/
+*.pyc
+.env
