@@ -48,3 +48,5 @@ apps/mobile/.expo
 # Database backups — never commit raw dumps, may contain customer PII
 backups/
 *.sql.gz
+*.local.pem
+Dockerfile.api.local-test

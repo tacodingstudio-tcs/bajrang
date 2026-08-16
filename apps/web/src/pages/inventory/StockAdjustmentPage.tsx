@@ -23,6 +23,10 @@ const STATUS_COLORS: Record<string, string> = {
 function CreateAdjustmentModal({ onClose }: { onClose: () => void }) {
   const createAdj  = useCreateStockAdjustment()
   const { data: productsData } = useProducts({ limit: 500 })
+  // Menu dishes and services (e.g. "Butter Naan", "Airport Pickup") are
+  // deliberately created with trackStock: false — they're priced items, not
+  // physical inventory, so there's no "system qty" to reconcile here.
+  const stockedProducts = (productsData?.data ?? []).filter((p: any) => p.trackStock)
 
   const [reason, setReason]   = useState('physical_count')
   const [adjDate, setAdjDate] = useState(new Date().toISOString().split('T')[0])
@@ -113,7 +117,7 @@ function CreateAdjustmentModal({ onClose }: { onClose: () => void }) {
                     aria-label="Product"
                   >
                     <option value="">— Select product —</option>
-                    {productsData?.data?.map((p: any) => (
+                    {stockedProducts.map((p: any) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>

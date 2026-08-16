@@ -15,6 +15,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
     "@billing/db": "workspace:*",
+    "@prisma/client": "^5.16.0",
     "@billing/domain-registry": "workspace:*",
     "@billing/gst-engine": "workspace:*",
     "@billing/shared": "workspace:*",

@@ -7,6 +7,7 @@ import { redis } from './lib/redis.js'
 
 // Route handlers
 import { authRoutes }           from './routes/auth.js'
+import { publicRoutes }         from './routes/public.js'
 import { invoiceRoutes }        from './routes/invoices.js'
 import { productRoutes }        from './routes/products.js'
 import { partyRoutes }          from './routes/parties.js'
@@ -18,6 +19,8 @@ import { analyticsRoutes }      from './routes/analytics.js'
 import { reportRoutes }         from './routes/reports.js'
 import { webhookRoutes }        from './routes/webhooks.js'
 import { branchRoutes }         from './routes/branches.js'
+import { websiteContentRoutes } from './routes/website-content.js'
+import { featureRoutes }        from './routes/features.js'
 import { userRoutes }           from './routes/users.js'
 import { notificationRoutes }   from './routes/notifications.js'
 import { categoryRoutes }       from './routes/categories.js'
@@ -93,6 +96,37 @@ if (process.env['NODE_ENV'] !== 'production') {
     return { flushed: true }
   })
 
+  // Backs the "Dev credentials" panel on the login page — lists every user
+  // of the first tenant so newly-created test accounts show up without a
+  // frontend code change. PINs are hashed and not recoverable, so every
+  // user's PIN (owner included) is force-reset to one fixed dev value on
+  // each call — dev-only, never runs in production.
+  const DEV_PIN = '1234'
+  app.get('/api/admin/dev-users', async () => {
+    const { db } = await import('@billing/db')
+    const tenant = await db.tenant.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
+      select: { ownerPhone: true, schemaName: true },
+    })
+    if (!tenant) return { tenantPhone: null, users: [] }
+
+    const { getTenantDb } = await import('./lib/tenant-db.js')
+    const { hashPin } = await import('./lib/password.js')
+    const tenantDb = getTenantDb(tenant.schemaName)
+    const rows = await tenantDb.user.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true, phone: true, role: true },
+    })
+
+    const devPinHash = await hashPin(DEV_PIN)
+    await tenantDb.user.updateMany({ where: { id: { in: rows.map((u) => u.id) } }, data: { pin: devPinHash } })
+
+    const users = rows.map((u) => ({ name: u.name, phone: u.phone, role: u.role, pin: DEV_PIN }))
+    return { tenantPhone: tenant.ownerPhone, users }
+  })
+
   app.post('/api/admin/reprovision-all', async () => {
     const { db } = await import('@billing/db')
     const { provisionTenantSchema } = await import('./lib/provision-schema.js')
@@ -116,6 +150,7 @@ if (process.env['NODE_ENV'] !== 'production') {
 await app.register(authRoutes,    { prefix: '/api/auth' })
 await app.register(tenantRoutes,  { prefix: '/api/tenants' })
 await app.register(webhookRoutes, { prefix: '/api/webhooks' })
+await app.register(publicRoutes,  { prefix: '/api/public' })
 
 // Product image (JWT via query param for browser <img> tags)
 app.get('/api/products/:id/image', async (req, reply) => {
@@ -158,6 +193,8 @@ await app.register(async (protectedApp) => {
 
   // Hotel-specific
   await protectedApp.register(hotelRoutes,         { prefix: '/api/hotel' })
+  await protectedApp.register(websiteContentRoutes, { prefix: '/api/website' })
+  await protectedApp.register(featureRoutes,         { prefix: '/api/features' })
 
   // Operations
   await protectedApp.register(analyticsRoutes,     { prefix: '/api/analytics' })

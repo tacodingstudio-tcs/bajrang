@@ -22,7 +22,7 @@ import { z } from 'zod'
 import { hashPin } from '../lib/password.js'
 import { revokeAllUserTokens } from '../lib/refreshToken.service.js'
 
-const ROLES = ['owner', 'manager', 'cashier', 'viewer'] as const
+const ROLES = ['owner', 'manager', 'cashier', 'viewer', 'super_user'] as const
 
 export const userRoutes: FastifyPluginAsync = async (app) => {
 
@@ -33,7 +33,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       where:  { id: req.userId },
       select: {
         id: true, name: true, phone: true, email: true,
-        role: true, branchIds: true, lang: true, isActive: true, createdAt: true,
+        role: true, branchIds: true, lang: true, isActive: true, createdAt: true, aiEnabled: true,
       },
     })
     if (!user) return reply.status(404).send({ error: 'User not found' })
@@ -42,8 +42,8 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
 
   // ── GET / — list users ────────────────────────────────────────────────────
   app.get('/', async (req, reply) => {
-    if (!['owner', 'manager'].includes(req.role))
-      return reply.status(403).send({ error: 'Manager or owner access required' })
+    if (!['owner', 'manager', 'super_user'].includes(req.role))
+      return reply.status(403).send({ error: 'Manager, owner, or super user access required' })
 
     const q = z.object({
       role:     z.enum(ROLES).optional(),
@@ -71,7 +71,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         where,
         select: {
           id: true, name: true, phone: true, email: true,
-          role: true, branchIds: true, lang: true, isActive: true, createdAt: true,
+          role: true, branchIds: true, lang: true, isActive: true, createdAt: true, aiEnabled: true,
           // pin intentionally excluded from list
         },
         orderBy: { createdAt: 'asc' },
@@ -95,7 +95,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       phone:     z.string().min(10).max(13),
       email:     z.string().email().optional(),
       pin:       z.string().length(4).regex(/^\d{4}$/, 'PIN must be 4 digits'),
-      role:      z.enum(['manager', 'cashier', 'viewer']).default('cashier'),
+      role:      z.enum(['manager', 'cashier', 'viewer', 'super_user']).default('cashier'),
       branchIds: z.array(z.string().uuid()).default([]),
       lang:      z.enum(['hi', 'en', 'gu', 'mr', 'ta', 'te', 'kn', 'bn']).default('hi'),
     }).parse(req.body)
@@ -141,15 +141,15 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
 
   // ── GET /:id — single user ────────────────────────────────────────────────
   app.get('/:id', async (req, reply) => {
-    if (!['owner', 'manager'].includes(req.role))
-      return reply.status(403).send({ error: 'Manager or owner access required' })
+    if (!['owner', 'manager', 'super_user'].includes(req.role))
+      return reply.status(403).send({ error: 'Manager, owner, or super user access required' })
 
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
     const user = await req.db.user.findUnique({
       where:  { id },
       select: {
         id: true, name: true, phone: true, email: true,
-        role: true, branchIds: true, lang: true, isActive: true, createdAt: true,
+        role: true, branchIds: true, lang: true, isActive: true, createdAt: true, aiEnabled: true,
       },
     })
     if (!user) return reply.status(404).send({ error: 'User not found' })
@@ -166,7 +166,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     const body = z.object({
       name:      z.string().min(2).max(100).trim().optional(),
       email:     z.string().email().optional().nullable(),
-      role:      z.enum(['manager', 'cashier', 'viewer']).optional(),
+      role:      z.enum(['manager', 'cashier', 'viewer', 'super_user']).optional(),
       branchIds: z.array(z.string().uuid()).optional(),
       lang:      z.enum(['hi', 'en', 'gu', 'mr', 'ta', 'te', 'kn', 'bn']).optional(),
     }).parse(req.body)
@@ -232,6 +232,28 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     await revokeAllUserTokens(req.tenantId, id)
 
     return reply.send({ success: true, userId: id, message: 'PIN updated successfully' })
+  })
+
+  // ── PATCH /:id/ai-access — grant/revoke AI Assistant access (owner or super_user) ──
+  // Deliberately narrow: only touches aiEnabled, so a super_user (who cannot
+  // otherwise manage users) can grant AI access without gaining any other
+  // user-management power.
+  app.patch('/:id/ai-access', async (req, reply) => {
+    if (!['owner', 'super_user'].includes(req.role))
+      return reply.status(403).send({ error: 'Only the owner or super user can manage AI access' })
+
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    const { aiEnabled } = z.object({ aiEnabled: z.boolean() }).parse(req.body)
+
+    const existing = await req.db.user.findUnique({ where: { id }, select: { id: true } })
+    if (!existing) return reply.status(404).send({ error: 'User not found' })
+
+    const user = await req.db.user.update({
+      where: { id },
+      data:  { aiEnabled },
+      select: { id: true, name: true, role: true, aiEnabled: true },
+    })
+    return user
   })
 
   // ── POST /:id/deactivate ──────────────────────────────────────────────────

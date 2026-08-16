@@ -8,8 +8,9 @@ import {
   useReportsPlStatement, useReportsCashRegister, useReportsCashRegisterSave,
   useReportsBankAccounts, useReportsBankAccountCreate,
   useReportsBankRecon, useReportsBankReconSave, useDayBook,
+  useHotelOccupancy,
 } from '@/hooks/useApi'
-import { FileText, TrendingUp, BarChart2, Download, DollarSign, Landmark, BookOpen } from 'lucide-react'
+import { FileText, TrendingUp, BarChart2, Download, DollarSign, Landmark, BookOpen, BedDouble } from 'lucide-react'
 
 function formatINR(n: number) {
   return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
@@ -76,20 +77,21 @@ function PLDivider({ label }: { label: string }) {
 }
 
 const TABS = [
-  { key: 'pl',       label: 'P&L Statement',        icon: BookOpen   },
-  { key: 'svp',      label: 'Sales vs Purchases',    icon: TrendingUp },
-  { key: 'cash',     label: 'Cash Register',         icon: DollarSign },
-  { key: 'bank',     label: 'Bank Reconciliation',   icon: Landmark   },
-  { key: 'gst',      label: 'GST Report',            icon: FileText   },
-  { key: 'margin',   label: 'Margin by Product',     icon: BarChart2  },
-  { key: 'day-book', label: 'Day Book',              icon: BookOpen   },
+  { key: 'pl',        label: 'P&L Statement',        icon: BookOpen   },
+  { key: 'occupancy', label: 'Occupancy & ADR',       icon: BedDouble  },
+  { key: 'svp',       label: 'Sales vs Purchases',    icon: TrendingUp },
+  { key: 'cash',      label: 'Cash Register',         icon: DollarSign },
+  { key: 'bank',      label: 'Bank Reconciliation',   icon: Landmark   },
+  { key: 'gst',       label: 'GST Report',            icon: FileText   },
+  { key: 'margin',    label: 'Margin by Product',     icon: BarChart2  },
+  { key: 'day-book',  label: 'Day Book',              icon: BookOpen   },
 ]
 
 export function ReportsPage() {
   const domainType = useAuthStore((s) => s.branch?.domainType as string | undefined)
   const showSvpTab = !SERVICE_DOMAINS.has(domainType ?? '')
   const visibleTabs = TABS.filter((t) => t.key !== 'svp' || showSvpTab)
-  const [tab, setTab] = useState<'pl' | 'svp' | 'cash' | 'bank' | 'gst' | 'margin' | 'day-book'>('pl')
+  const [tab, setTab] = useState<'pl' | 'occupancy' | 'svp' | 'cash' | 'bank' | 'gst' | 'margin' | 'day-book'>('pl')
 
   return (
     <div>
@@ -115,6 +117,7 @@ export function ReportsPage() {
         </div>
 
         {tab === 'pl'       && <PLStatementTab />}
+        {tab === 'occupancy' && <OccupancyTab />}
         {tab === 'svp'      && showSvpTab && <SalesVsPurchasesTab />}
         {tab === 'cash'     && <CashRegisterTab />}
         {tab === 'bank'     && <BankReconciliationTab />}
@@ -249,6 +252,91 @@ function PLStatementTab() {
             ))}
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── Tab: Occupancy & ADR ──────────────────────────────────────────────────────
+function OccupancyTab() {
+  const [from, setFrom] = useState(firstOfMonth())
+  const [to,   setTo  ] = useState(todayStr())
+  const [applied, setApplied] = useState({ from: firstOfMonth(), to: todayStr() })
+
+  const { data, isLoading, error } = useHotelOccupancy(applied)
+
+  const SOURCE_LABELS: Record<string, string> = {
+    walk_in: 'Walk-in', ota: 'OTA', phone: 'Phone', website: 'Website', agent: 'Agent',
+  }
+  const maxSourceRevenue = Math.max(1, ...(data?.bookingSources ?? []).map((s: any) => s.revenue))
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3 flex-wrap">
+        <label className="text-sm text-gray-500" htmlFor="occ-from">From</label>
+        <input id="occ-from" type="date" title="Start date" value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          className="input text-sm w-40" max={to} />
+        <label className="text-sm text-gray-500" htmlFor="occ-to">To</label>
+        <input id="occ-to" type="date" title="End date" value={to}
+          onChange={(e) => setTo(e.target.value)}
+          className="input text-sm w-40" min={from} max={todayStr()} />
+        <button
+          type="button"
+          onClick={() => setApplied({ from, to })}
+          className="btn btn-primary text-sm px-4 py-2"
+        >
+          Apply
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-12 text-gray-400">Loading…</div>
+      ) : error ? (
+        <div className="text-center py-12 text-red-500">Failed to load occupancy report</div>
+      ) : !data ? null : (
+        <>
+          <div className="grid grid-cols-4 gap-4">
+            <div className="card p-4">
+              <div className="text-xs text-gray-400">Occupancy</div>
+              <div className="text-2xl font-bold text-gray-900 mt-1">{data.occupancyPct}%</div>
+              <div className="text-xs text-gray-400 mt-1">{data.roomNightsSold} / {data.roomNightsAvailable} room-nights</div>
+            </div>
+            <div className="card p-4">
+              <div className="text-xs text-gray-400">ADR</div>
+              <div className="text-2xl font-bold text-gray-900 mt-1">{formatINR(data.adr)}</div>
+              <div className="text-xs text-gray-400 mt-1">Average daily rate</div>
+            </div>
+            <div className="card p-4">
+              <div className="text-xs text-gray-400">RevPAR</div>
+              <div className="text-2xl font-bold text-gray-900 mt-1">{formatINR(data.revPar)}</div>
+              <div className="text-xs text-gray-400 mt-1">Revenue per available room</div>
+            </div>
+            <div className="card p-4">
+              <div className="text-xs text-gray-400">Room Revenue</div>
+              <div className="text-2xl font-bold text-gray-900 mt-1">{formatINR(data.roomRevenue)}</div>
+              <div className="text-xs text-gray-400 mt-1">{data.activeRooms} active rooms · {data.days} days</div>
+            </div>
+          </div>
+
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Bookings by Source</h3>
+            {data.bookingSources.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">No bookings in this range</div>
+            ) : (
+              <div className="space-y-3">
+                {data.bookingSources.map((src: any) => (
+                  <div key={src.source} className="flex items-center gap-3">
+                    <span className="text-sm text-gray-600 w-20 shrink-0">{SOURCE_LABELS[src.source] ?? src.source}</span>
+                    <Bar value={src.revenue} max={maxSourceRevenue} color="bg-primary-500" />
+                    <span className="text-sm font-mono text-gray-900 w-28 text-right shrink-0">{formatINR(src.revenue)}</span>
+                    <span className="text-xs text-gray-400 w-20 text-right shrink-0">{src.count} bookings</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   )

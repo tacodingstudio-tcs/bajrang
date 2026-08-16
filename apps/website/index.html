@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bajrang Stay Inn — Kodinar</title>
+  <meta name="description" content="A quiet hotel stay in Kodinar, Gujarat — minutes from Somnath Temple and the Saurashtra coast. Comfortable rooms, free Wi-Fi, parking, and breakfast included." />
+  <link rel="canonical" href="https://www.bajrangstayinn.example/" />
+
+  <!-- Open Graph / social share preview -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Bajrang Stay Inn" />
+  <meta property="og:title" content="Bajrang Stay Inn — Kodinar" />
+  <meta property="og:description" content="A quiet hotel stay in Kodinar, Gujarat — minutes from Somnath Temple and the Saurashtra coast." />
+  <meta property="og:url" content="https://www.bajrangstayinn.example/" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Noto+Sans+Gujarati:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Structured data — lets Google show this as a Hotel result (address, phone, rating) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Hotel",
+    "name": "Bajrang Stay Inn",
+    "description": "A quiet hotel stay in Kodinar, Gujarat, minutes from Somnath Temple and the Saurashtra coast.",
+    "url": "https://www.bajrangstayinn.example/",
+    "telephone": "+91-2795-234567",
+    "priceRange": "₹1,800 – ₹6,500",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Kodinar",
+      "addressRegion": "Gujarat",
+      "postalCode": "362720",
+      "addressCountry": "IN"
+    },
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": 20.86,
+      "longitude": 70.80
+    },
+    "amenityFeature": [
+      { "@type": "LocationFeatureSpecification", "name": "Free Wi-Fi", "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "Free Parking", "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "Breakfast", "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "24/7 Front Desk", "value": true }
+    ]
+  }
+  </script>
+</head>
+<body class="bg-white">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

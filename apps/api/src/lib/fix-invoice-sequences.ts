@@ -29,7 +29,7 @@ async function main() {
       )
     `)
     await db.$executeRawUnsafe(
-      `GRANT SELECT, INSERT, UPDATE ON "${schema_name}".invoice_sequences TO billing_app`
+      `GRANT SELECT, INSERT, UPDATE ON "${schema_name}".invoice_sequences TO hotel_app`
     )
     console.log(`  Created: ${schema_name}`)
   }

@@ -19,6 +19,7 @@ const STATUS_COLORS: Record<string, string> = {
 function CreateTransferModal({ onClose }: { onClose: () => void }) {
   const createTransfer = useCreateStockTransfer()
   const { data: productsData } = useProducts({ limit: 500 })
+  const stockedProducts = (productsData?.data ?? []).filter((p: any) => p.trackStock)
   const branch = useAuthStore((s) => s.branch)
   const { data: branches }     = useBranches()
 
@@ -127,7 +128,7 @@ function CreateTransferModal({ onClose }: { onClose: () => void }) {
                   aria-label="Product"
                 >
                   <option value="">— Select product —</option>
-                  {productsData?.data?.map((p: any) => (
+                  {stockedProducts.map((p: any) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>

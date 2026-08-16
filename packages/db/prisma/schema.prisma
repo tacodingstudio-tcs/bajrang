@@ -82,6 +82,7 @@ model User {
   pin       String?
   lang      String   @default("hi")
   isActive  Boolean  @default(true)
+  aiEnabled Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

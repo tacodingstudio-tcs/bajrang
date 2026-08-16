@@ -1,7 +1,8 @@
 // Hotel Housekeeping Board — Kanban-style task management
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { hotelApi } from '@/lib/api'
+import { hotelApi, usersApi } from '@/lib/api'
+import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Plus, X, CheckCircle2, Clock, Loader2, MinusCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -30,15 +31,26 @@ const PRIORITY_BADGE: Record<string, string> = {
 
 function AddTaskModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
+  const user = useAuthStore((s) => s.user)
+  const isViewer = user?.role === 'viewer'
   const { data: rooms = [] } = useQuery({
     queryKey: ['hotel-rooms'],
     queryFn:  () => hotelApi.listRooms(),
   })
+  // Housekeeping staff list — viewer can't list users server-side (only
+  // owner/manager/super_user can), so viewer just self-assigns instead.
+  const { data: staffData } = useQuery({
+    queryKey: ['users', 'viewer'],
+    queryFn:  () => usersApi.list({ role: 'viewer', isActive: true }),
+    enabled:  !isViewer,
+  })
+  const staff: { id: string; name: string }[] = staffData?.users ?? []
+
   const [form, setForm] = useState({
     roomId:       '',
     taskType:     'stay_clean',
     priority:     'normal',
-    assignedTo:   '',
+    assignedTo:   isViewer ? (user?.name ?? '') : '',
     notes:        '',
     scheduledFor: new Date().toISOString().split('T')[0],
   })
@@ -94,7 +106,16 @@ function AddTaskModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="label">Assigned To</label>
-            <input className="input" value={form.assignedTo} onChange={f('assignedTo')} placeholder="Staff name" />
+            {isViewer ? (
+              <input className="input bg-gray-50" value={form.assignedTo} disabled />
+            ) : (
+              <select className="input" value={form.assignedTo} onChange={f('assignedTo')}>
+                <option value="">— Unassigned —</option>
+                {staff.map((s) => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div>
             <label className="label">Notes</label>

@@ -1,0 +1,82 @@
+services:
+  # ── API server ────────────────────────────────────────────────────────────
+  - type: web
+    name: hotel-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      # Use Neon's DIRECT connection string, NOT the pooled/PgBouncer one.
+      # This app sets the active tenant schema via Prisma's ?schema= param
+      # per PrismaClient, relying on search_path staying stable per
+      # connection — PgBouncer's transaction-mode pooling can hand different
+      # logical clients the same backend connection with stale search_path,
+      # causing "relation does not exist" errors. Confirmed via direct
+      # testing against Neon before writing this file.
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: WEB_URL
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: STORAGE_TYPE
+        value: local
+
+  # ── Background workers (WhatsApp sends, payment reminders, hotel automation) ──
+  - type: worker
+    name: hotel-workers
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    dockerCommand: npx tsx src/workers/index.ts
+    plan: starter
+    region: oregon
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Use Neon's DIRECT connection string, NOT the pooled/PgBouncer one.
+      # This app sets the active tenant schema via Prisma's ?schema= param
+      # per PrismaClient, relying on search_path staying stable per
+      # connection — PgBouncer's transaction-mode pooling can hand different
+      # logical clients the same backend connection with stale search_path,
+      # causing "relation does not exist" errors. Confirmed via direct
+      # testing against Neon before writing this file.
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

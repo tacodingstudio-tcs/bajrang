@@ -28,6 +28,29 @@ import { whatsappQueue } from '../lib/queues.js'
 
 export const aiRoutes: FastifyPluginAsync = async (app) => {
 
+  // Owner and super_user always have AI access. Everyone else needs the
+  // per-user aiEnabled flag, granted individually by the owner or a
+  // super_user — checked live against the DB (not the JWT) so toggling
+  // access takes effect immediately, without waiting for the user's token
+  // to expire or re-login.
+  app.addHook('preHandler', async (req, reply) => {
+    if (req.role === 'owner' || req.role === 'super_user') return
+
+    // Cashier is never eligible, even with aiEnabled set — that toggle is
+    // meant for manager-tier staff only.
+    if (req.role === 'cashier') {
+      return reply.status(403).send({ error: 'AI Assistant is not available for this role' })
+    }
+
+    const user = await req.db.user.findUnique({
+      where: { id: req.userId },
+      select: { aiEnabled: true },
+    })
+    if (!user?.aiEnabled) {
+      return reply.status(403).send({ error: 'AI Assistant is not enabled for this account' })
+    }
+  })
+
   // ── POST /api/ai/extract-invoice ──────────────────────────────────────────
   // Body: { text: "Ramesh ne 10 kilo chawal liya 50 rupaye kilo" }
   // Returns a draft invoice for the cashier to review before confirming.

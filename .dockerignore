@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+.git
+**/dist
+.env
+**/.env
+*.local.pem
+!avast-root.local.pem
+Dockerfile.api.local-test
+docker

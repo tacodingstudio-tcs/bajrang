@@ -3,6 +3,27 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { whatsappQueue } from '../lib/queues.js'
+
+// ── Guest WhatsApp messages ───────────────────────────────────────────────────
+// Best-effort — a guest not having WhatsApp, or the queue being unavailable,
+// should never block the actual booking/check-in/checkout operation.
+function toE164(phone: string): string {
+  // Length-based, not a startsWith('91') check — a bare 10-digit Indian
+  // number can itself start with "91" (e.g. 9123456780), which would
+  // wrongly be treated as already having the country code prefixed.
+  const digits = phone.replace(/\D/g, '')
+  return digits.length === 10 ? `91${digits}` : digits
+}
+
+async function sendGuestMessage(toPhone: string | null | undefined, message: string): Promise<void> {
+  if (!toPhone) return
+  try {
+    await whatsappQueue.add('hotel_message', { type: 'hotel_message', toPhone: toE164(toPhone), message })
+  } catch (err) {
+    console.error('[hotel] failed to queue guest WhatsApp message:', (err as Error).message)
+  }
+}
 
 // ── Helper: raw SQL against tenant schema ────────────────────────────────────
 // Prisma doesn't know about our dynamic hotel_* tables; we use $queryRawUnsafe
@@ -11,6 +32,20 @@ import { z } from 'zod'
 
 function tbl(schemaName: string, table: string) {
   return `"${schemaName}"."${table}"`
+}
+
+// ── Weekend rate ──────────────────────────────────────────────────────────────
+// Friday and Saturday nights count as "weekend" — the standard convention for
+// weekend room-rate surcharges. If a room has a weekendRate configured, it
+// applies on those nights instead of the booking's (possibly discounted)
+// ratePerNight; otherwise the flat rate is used every night.
+function isWeekendNight(date: Date): boolean {
+  const day = date.getDay() // 0=Sun ... 5=Fri, 6=Sat
+  return day === 5 || day === 6
+}
+
+function nightlyRate(date: Date, ratePerNight: number, weekendRate: number | null | undefined): number {
+  return isWeekendNight(date) && weekendRate != null ? weekendRate : ratePerNight
 }
 
 // ── Folio number generator ────────────────────────────────────────────────────
@@ -131,6 +166,9 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
       hasWifi:      z.boolean().default(true),
       viewType:     z.string().optional(),
       amenities:    z.array(z.string()).default([]),
+      imageUrl:     z.string().url().optional(),
+      images:       z.array(z.string().url()).max(12).default([]),
+      description:  z.string().max(1000).optional(),
       notes:        z.string().optional(),
     }).parse(req.body)
 
@@ -140,13 +178,13 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
     const rows = await req.db.$queryRawUnsafe<any[]>(
       `INSERT INTO ${tbl(s,'hotel_rooms')}
         ("branchId","roomNo","roomType","floor","bedType","maxOccupancy","ratePerNight","weekendRate",
-         "hasAc","hasTv","hasGeyser","hasWifi","viewType","amenities","notes")
-       VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+         "hasAc","hasTv","hasGeyser","hasWifi","viewType","amenities","imageUrl","images","description","notes")
+       VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        RETURNING *`,
       b, body.roomNo, body.roomType, body.floor ?? null, body.bedType ?? null,
       body.maxOccupancy, body.ratePerNight, body.weekendRate ?? null,
       body.hasAc, body.hasTv, body.hasGeyser, body.hasWifi,
-      body.viewType ?? null, body.amenities, body.notes ?? null
+      body.viewType ?? null, body.amenities, body.imageUrl ?? null, body.images, body.description ?? null, body.notes ?? null
     )
     return reply.status(201).send(rows[0])
   })
@@ -181,6 +219,9 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
       hasWifi:      z.boolean().optional(),
       viewType:     z.string().nullable().optional(),
       amenities:    z.array(z.string()).optional(),
+      imageUrl:     z.string().url().nullable().optional(),
+      images:       z.array(z.string().url()).max(12).optional(),
+      description:  z.string().max(1000).nullable().optional(),
       status:       z.enum(['available','occupied','dirty','maintenance','blocked']).optional(),
       notes:        z.string().nullable().optional(),
       isActive:     z.boolean().optional(),
@@ -227,12 +268,13 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
   // GET /api/hotel/bookings
   app.get('/bookings', async (req) => {
     const query = z.object({
-      status:   z.string().optional(),
-      date:     z.string().optional(),   // filter by check-in date (YYYY-MM-DD)
-      roomId:   z.string().uuid().optional(),
-      search:   z.string().optional(),
-      page:     z.coerce.number().default(1),
-      limit:    z.coerce.number().default(20),
+      status:        z.string().optional(),
+      date:          z.string().optional(),   // filter by check-in date (YYYY-MM-DD)
+      roomId:        z.string().uuid().optional(),
+      search:        z.string().optional(),
+      bookingSource: z.string().optional(),
+      page:          z.coerce.number().default(1),
+      limit:         z.coerce.number().default(20),
     }).parse(req.query)
 
     const s = req.schemaName
@@ -260,6 +302,10 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
       params.push(`%${query.search}%`)
       where += ` AND (bk."guestName" ILIKE $${params.length} OR bk."folioNo" ILIKE $${params.length} OR bk."guestPhone" ILIKE $${params.length})`
     }
+    if (query.bookingSource) {
+      params.push(query.bookingSource)
+      where += ` AND bk."bookingSource" = $${params.length}`
+    }
 
     const [bookings, totals] = await Promise.all([
       req.db.$queryRawUnsafe<any[]>(
@@ -283,6 +329,42 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
       page:  query.page,
       limit: query.limit,
     }
+  })
+
+  // GET /api/hotel/guests/history?phone=... — repeat-guest lookup, so front
+  // desk can see "returning guest, N previous stays" while creating a new
+  // booking or checking someone in.
+  app.get('/guests/history', async (req, reply) => {
+    const q = z.object({
+      phone: z.string().min(5),
+      excludeBookingId: z.string().uuid().optional(),
+    }).parse(req.query)
+
+    const s = req.schemaName
+    const b = req.branchId
+
+    const rows = await req.db.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*)::bigint as "stayCount",
+              COALESCE(SUM("totalAmount"),0) as "totalSpent",
+              MAX("checkOut") as "lastStay",
+              MAX("guestName") as "guestName"
+       FROM ${tbl(s,'hotel_bookings')}
+       WHERE "branchId" = $1::uuid AND "guestPhone" = $2 AND status = 'checked_out'
+         ${q.excludeBookingId ? `AND id != $3::uuid` : ''}`,
+      ...(q.excludeBookingId ? [b, q.phone, q.excludeBookingId] : [b, q.phone])
+    )
+
+    const r = rows[0]
+    const stayCount = Number(r?.stayCount ?? 0)
+    if (stayCount === 0) return reply.send({ isReturning: false, stayCount: 0 })
+
+    return reply.send({
+      isReturning: true,
+      stayCount,
+      totalSpent: Number(r.totalSpent ?? 0),
+      lastStay:   r.lastStay,
+      guestName:  r.guestName,
+    })
   })
 
   // POST /api/hotel/bookings  — create reservation
@@ -331,12 +413,19 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(409).send({ error: 'Room already booked for those dates' })
     }
 
-    // Calculate nights and total
+    // Calculate nights and total — weekend nights use the room's weekendRate
+    // (if configured) instead of the booking's flat ratePerNight.
     const msPerNight = 86400000
     const nights     = Math.max(1, Math.round(
       (new Date(body.checkOut).getTime() - new Date(body.checkIn).getTime()) / msPerNight
     ))
-    const totalAmount = nights * body.ratePerNight
+    const weekendRate = roomRows[0].weekendRate != null ? Number(roomRows[0].weekendRate) : null
+    let totalAmount = 0
+    for (let i = 0; i < nights; i++) {
+      const night = new Date(body.checkIn)
+      night.setDate(night.getDate() + i)
+      totalAmount += nightlyRate(night, body.ratePerNight, weekendRate)
+    }
 
     const folioNo = generateFolioNo('FLO')
 
@@ -363,6 +452,18 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
         rows[0].id, b, 1, -body.advancePaid, -body.advancePaid, req.userId
       )
     }
+
+    // Booking confirmation — best-effort, never blocks the response.
+    const branch = await req.db.branch.findUnique({ where: { id: b }, select: { name: true } })
+    void sendGuestMessage(
+      body.guestPhone,
+      `Hi ${body.guestName}, your booking at ${branch?.name ?? 'our hotel'} is confirmed! 🙏\n` +
+      `Folio: ${folioNo}\n` +
+      `Check-in: ${new Date(body.checkIn).toLocaleDateString('en-IN')}\n` +
+      `Check-out: ${new Date(body.checkOut).toLocaleDateString('en-IN')}\n` +
+      `Total: ₹${totalAmount.toFixed(0)}\n\n` +
+      `We look forward to hosting you!`
+    )
 
     return reply.status(201).send(rows[0])
   })
@@ -411,6 +512,7 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
       nationality:   z.string().optional(),
       idType:        z.string().nullable().optional(),
       idNumber:      z.string().nullable().optional(),
+      idImages:      z.array(z.string()).max(4).nullable().optional(),
       adults:        z.number().int().optional(),
       children:      z.number().int().optional(),
       checkIn:       z.string().optional(),
@@ -424,6 +526,10 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
       notes:         z.string().nullable().optional(),
       formCFiled:    z.boolean().optional(),
     }).parse(req.body)
+
+    if (body.idImages?.some((img) => img.length > 700_000)) {
+      return reply.status(413).send({ error: 'One of the ID photos is too large (max ~500KB each)' })
+    }
 
     const s = req.schemaName
     const b = req.branchId
@@ -458,15 +564,25 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
     const body = z.object({
       idType:     z.string().optional(),
       idNumber:   z.string().optional(),
+      idImages:   z.array(z.string()).max(4).optional(),
       formCFiled: z.boolean().default(false),
       notes:      z.string().optional(),
     }).parse(req.body)
+
+    // ID scans are base64 data URIs — cap per-image size so a booking row
+    // can't balloon (500KB raw image ≈ 700KB base64, same cap used elsewhere).
+    const MAX_ID_IMAGE_BYTES = 700_000
+    if (body.idImages?.some((img) => img.length > MAX_ID_IMAGE_BYTES)) {
+      return reply.status(413).send({ error: 'One of the ID photos is too large (max ~500KB each)' })
+    }
 
     const s = req.schemaName
     const b = req.branchId
 
     const rows = await req.db.$queryRawUnsafe<any[]>(
-      `SELECT * FROM ${tbl(s,'hotel_bookings')} WHERE id = $1::uuid AND "branchId" = $2::uuid`,
+      `SELECT bk.*, r."weekendRate", r."roomNo" FROM ${tbl(s,'hotel_bookings')} bk
+       LEFT JOIN ${tbl(s,'hotel_rooms')} r ON r.id = bk."roomId"
+       WHERE bk.id = $1::uuid AND bk."branchId" = $2::uuid`,
       id, b
     )
     const booking = rows[0]
@@ -483,9 +599,10 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
         `UPDATE ${tbl(s,'hotel_bookings')}
          SET status = 'checked_in', "actualCheckIn" = $3,
              "idType" = COALESCE($4, "idType"), "idNumber" = COALESCE($5, "idNumber"),
+             "idImages" = COALESCE($7, "idImages"),
              "formCFiled" = $6, "updatedAt" = NOW()
          WHERE id = $1::uuid AND "branchId" = $2::uuid RETURNING *`,
-        id, b, now, body.idType ?? null, body.idNumber ?? null, body.formCFiled
+        id, b, now, body.idType ?? null, body.idNumber ?? null, body.formCFiled, body.idImages ?? null
       ),
       req.db.$executeRawUnsafe(
         `UPDATE ${tbl(s,'hotel_rooms')} SET status = 'occupied' WHERE id = $1::uuid AND "branchId" = $2::uuid`,
@@ -493,13 +610,18 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
       ),
     ])
 
-    // Add first-night room charge to folio
+    // Add first-night room charge to folio — weekend nights use the room's
+    // weekendRate (if configured) instead of the booking's flat rate.
+    const night1Rate = nightlyRate(
+      now, Number(booking.ratePerNight),
+      booking.weekendRate != null ? Number(booking.weekendRate) : null
+    )
     await req.db.$executeRawUnsafe(
       `INSERT INTO ${tbl(s,'hotel_folio_charges')}
         ("bookingId","branchId","chargeType","description","qty","rate","amount","gstRate","date","addedBy")
        VALUES ($1::uuid,$2::uuid,'room',$3,1,$4,$5,12,CURRENT_DATE,$6::uuid)`,
-      id, b, `Room ${booking.roomNo ?? ''} – Night 1`, Number(booking.ratePerNight),
-      Number(booking.ratePerNight), req.userId
+      id, b, `Room ${booking.roomNo ?? ''} – Night 1`, night1Rate,
+      night1Rate, req.userId
     )
 
     // Create housekeeping task for the next morning
@@ -570,6 +692,18 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
       b, booking.roomId, id
     )
 
+    // Checkout thank-you — best-effort, never blocks the response.
+    const branch = await req.db.branch.findUnique({ where: { id: b }, select: { name: true } })
+    const balanceDue = Math.max(0, balance)
+    void sendGuestMessage(
+      booking.guestPhone,
+      `Thank you for staying with us at ${branch?.name ?? 'our hotel'}, ${booking.guestName}! 🙏\n` +
+      `Folio: ${booking.folioNo}\n` +
+      `Total: ₹${totalCharges.toFixed(0)}` +
+      (balanceDue > 0 ? `\nBalance settled: ₹${balanceDue.toFixed(0)}` : '') +
+      `\n\nWe hope to host you again soon!`
+    )
+
     return reply.send({
       booking: updated[0],
       summary: {
@@ -590,8 +724,9 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
   app.post('/bookings/:id/charges', async (req, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
     const body = z.object({
-      chargeType:  z.enum(['room','food','laundry','minibar','spa','transport','telephone','other']).default('other'),
+      chargeType:  z.enum(['room','food','service','laundry','minibar','spa','transport','telephone','other']).default('other'),
       description: z.string().min(1),
+      productId:   z.string().uuid().optional(), // links back to the menu item, when added from the kitchen menu
       qty:         z.number().min(0).default(1),
       rate:        z.number(),
       gstRate:     z.number().min(0).default(0),
@@ -615,14 +750,62 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
 
     const rows = await req.db.$queryRawUnsafe<any[]>(
       `INSERT INTO ${tbl(s,'hotel_folio_charges')}
-        ("bookingId","branchId","chargeType","description","qty","rate","amount","gstRate","date","addedBy")
-       VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10::uuid)
+        ("bookingId","branchId","chargeType","description","productId","qty","rate","amount","gstRate","date","addedBy")
+       VALUES ($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11::uuid)
        RETURNING *`,
-      id, b, body.chargeType, body.description,
+      id, b, body.chargeType, body.description, body.productId ?? null,
       body.qty, body.rate, amount, body.gstRate,
       body.date ? new Date(body.date) : new Date(), req.userId
     )
     return reply.status(201).send(rows[0])
+  })
+
+  // POST /api/hotel/bookings/:id/charges/bulk — a full food order (or any
+  // multi-item order) in one call, so the whole order lands on the folio
+  // atomically instead of one item succeeding and another failing halfway.
+  app.post('/bookings/:id/charges/bulk', async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    const body = z.object({
+      date: z.string().optional(),
+      items: z.array(z.object({
+        chargeType:  z.enum(['room','food','service','laundry','minibar','spa','transport','telephone','other']).default('food'),
+        description: z.string().min(1),
+        productId:   z.string().uuid().optional(),
+        qty:         z.number().min(0).default(1),
+        rate:        z.number(),
+        gstRate:     z.number().min(0).default(0),
+      })).min(1).max(50),
+    }).parse(req.body)
+
+    const s = req.schemaName
+    const b = req.branchId
+
+    const bkRows = await req.db.$queryRawUnsafe<any[]>(
+      `SELECT id, status FROM ${tbl(s,'hotel_bookings')} WHERE id = $1::uuid AND "branchId" = $2::uuid`,
+      id, b
+    )
+    if (!bkRows[0]) return reply.status(404).send({ error: 'Booking not found' })
+    if (bkRows[0].status === 'checked_out' || bkRows[0].status === 'cancelled') {
+      return reply.status(422).send({ error: 'Cannot add charges to a closed folio' })
+    }
+
+    const date = body.date ? new Date(body.date) : new Date()
+
+    const inserted = await req.db.$transaction(
+      body.items.map((item) => {
+        const amount = Number((item.qty * item.rate).toFixed(2))
+        return req.db.$queryRawUnsafe<any[]>(
+          `INSERT INTO ${tbl(s,'hotel_folio_charges')}
+            ("bookingId","branchId","chargeType","description","productId","qty","rate","amount","gstRate","date","addedBy")
+           VALUES ($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11::uuid)
+           RETURNING *`,
+          id, b, item.chargeType, item.description, item.productId ?? null,
+          item.qty, item.rate, amount, item.gstRate, date, req.userId
+        )
+      })
+    )
+
+    return reply.status(201).send(inserted.map((r) => r[0]))
   })
 
   // DELETE /api/hotel/bookings/:id/charges/:chargeId
@@ -760,7 +943,7 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
 
     // Get all checked-in bookings
     const bookings = await req.db.$queryRawUnsafe<any[]>(
-      `SELECT bk.*, r."roomNo"
+      `SELECT bk.*, r."roomNo", r."weekendRate"
        FROM ${tbl(s,'hotel_bookings')} bk
        LEFT JOIN ${tbl(s,'hotel_rooms')} r ON r.id = bk."roomId"
        WHERE bk."branchId" = $1::uuid AND bk.status = 'checked_in'`,
@@ -787,14 +970,18 @@ export const hotelRoutes: FastifyPluginAsync = async (app) => {
         (Date.now() - new Date(booking.actualCheckIn ?? booking.checkIn).getTime()) / 86400000
       ) + 1
 
+      const rate = nightlyRate(
+        new Date(), Number(booking.ratePerNight),
+        booking.weekendRate != null ? Number(booking.weekendRate) : null
+      )
       await req.db.$executeRawUnsafe(
         `INSERT INTO ${tbl(s,'hotel_folio_charges')}
           ("bookingId","branchId","chargeType","description","qty","rate","amount","gstRate","date","addedBy")
          VALUES ($1::uuid,$2::uuid,'room',$3,1,$4,$5,12,CURRENT_DATE,$6::uuid)`,
         booking.id, b,
         `Room ${booking.roomNo ?? ''} – Night ${nightsElapsed}`,
-        Number(booking.ratePerNight),
-        Number(booking.ratePerNight),
+        rate,
+        rate,
         req.userId
       )
       charged.push(booking.folioNo)

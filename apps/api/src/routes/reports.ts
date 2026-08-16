@@ -13,6 +13,15 @@ import { Prisma } from '@prisma/client'
 
 export const reportRoutes: FastifyPluginAsync = async (app) => {
 
+  // Financial/GST reports are manager-tier — cashier's job is billing and
+  // day-to-day front desk work, not P&L/GST filing. Same reasoning as
+  // Branches/Website/POS Settings being hidden from cashier.
+  app.addHook('preHandler', async (req, reply) => {
+    if (req.role === 'cashier') {
+      return reply.status(403).send({ error: 'Reports are not available for this role' })
+    }
+  })
+
   // ── GET /api/reports/day-book ─────────────────────────────────────────────
   // Every accountant's starting point: all money that came in and went out
   // on a specific date, with an opening/closing cash position.
@@ -893,6 +902,76 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
       revenue:  { this: rev.this,  last: rev.last,  delta: delta(rev.this,  rev.last)  },
       expenses: { this: exp.this,  last: exp.last,  delta: delta(exp.this,  exp.last)  },
       profit:   { this: prof.this, last: prof.last, delta: delta(prof.this, prof.last) },
+    }
+  })
+
+  // ── GET /api/reports/hotel-occupancy ────────────────────────────────────────
+  // Hotel-specific: occupancy %, ADR (average daily rate), RevPAR (revenue per
+  // available room), and a booking-source breakdown for a date range. Hotel
+  // extension tables aren't in the Prisma schema, so this is raw SQL against
+  // the tenant's schema like routes/hotel.ts.
+  app.get('/hotel-occupancy', async (req, reply) => {
+    const q = z.object({
+      from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      to:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    }).parse(req.query)
+
+    if (q.from > q.to) return reply.status(422).send({ error: '"from" must be before "to"' })
+
+    const s = req.schemaName
+    const b = req.branchId
+    const tbl = (table: string) => `"${s}"."${table}"`
+
+    const days = Math.round(
+      (new Date(q.to).getTime() - new Date(q.from).getTime()) / 86400000
+    ) + 1
+
+    const [roomCountRows, roomRevenueRows, sourceRows] = await Promise.all([
+      req.db.$queryRawUnsafe<{ count: bigint }[]>(
+        `SELECT COUNT(*)::bigint as count FROM ${tbl('hotel_rooms')}
+         WHERE "branchId" = $1::uuid AND "isActive" = true`,
+        b
+      ),
+      req.db.$queryRawUnsafe<{ nights: bigint; revenue: string }[]>(
+        `SELECT COUNT(*)::bigint as nights, COALESCE(SUM(fc.amount),0) as revenue
+         FROM ${tbl('hotel_folio_charges')} fc
+         JOIN ${tbl('hotel_bookings')} bk ON bk.id = fc."bookingId"
+         WHERE bk."branchId" = $1::uuid AND fc."chargeType" = 'room'
+           AND fc.date >= $2::date AND fc.date <= $3::date`,
+        b, q.from, q.to
+      ),
+      req.db.$queryRawUnsafe<{ bookingSource: string; count: bigint; revenue: string }[]>(
+        `SELECT "bookingSource", COUNT(*)::bigint as count, COALESCE(SUM("totalAmount"),0) as revenue
+         FROM ${tbl('hotel_bookings')}
+         WHERE "branchId" = $1::uuid AND status != 'cancelled'
+           AND "checkIn" >= $2::date AND "checkIn" <= ($3::date + INTERVAL '1 day')
+         GROUP BY "bookingSource"
+         ORDER BY count DESC`,
+        b, q.from, q.to
+      ),
+    ])
+
+    const activeRooms      = Number(roomCountRows[0]?.count ?? 0)
+    const roomNightsSold   = Number(roomRevenueRows[0]?.nights ?? 0)
+    const roomRevenue      = Number(roomRevenueRows[0]?.revenue ?? 0)
+    const roomNightsAvail  = activeRooms * days
+    const occupancyPct     = roomNightsAvail > 0 ? (roomNightsSold / roomNightsAvail) * 100 : 0
+    const adr              = roomNightsSold  > 0 ? roomRevenue / roomNightsSold  : 0
+    const revPar           = roomNightsAvail > 0 ? roomRevenue / roomNightsAvail : 0
+
+    return {
+      from: q.from, to: q.to, days, activeRooms,
+      roomNightsAvailable: roomNightsAvail,
+      roomNightsSold,
+      occupancyPct: Math.round(occupancyPct * 10) / 10,
+      adr:    Math.round(adr),
+      revPar: Math.round(revPar),
+      roomRevenue: Math.round(roomRevenue),
+      bookingSources: sourceRows.map((r) => ({
+        source:  r.bookingSource,
+        count:   Number(r.count),
+        revenue: Math.round(Number(r.revenue)),
+      })),
     }
   })
 }

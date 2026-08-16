@@ -12,8 +12,9 @@ export interface AuthUser {
   id:    string
   name:  string
   phone: string
-  role:  'owner' | 'manager' | 'cashier' | 'viewer'
+  role:  'owner' | 'manager' | 'cashier' | 'viewer' | 'super_user'
   lang:  string
+  aiEnabled?: boolean
 }
 
 export interface AuthTenant {

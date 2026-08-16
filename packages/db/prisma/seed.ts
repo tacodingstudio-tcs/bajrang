@@ -148,7 +148,7 @@ async function provisionSchema(schemaName: string) {
       current_val BIGINT NOT NULL DEFAULT 1,
       PRIMARY KEY (branch_id, txn_type, fy)
     )`)
-  await db.$executeRawUnsafe(`GRANT SELECT, INSERT, UPDATE ON "${schemaName}".invoice_sequences TO billing_app`)
+  await db.$executeRawUnsafe(`GRANT SELECT, INSERT, UPDATE ON "${schemaName}".invoice_sequences TO hotel_app`)
   // expenses table (added after create_tenant_schema was written)
   await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "${schemaName}".expenses (

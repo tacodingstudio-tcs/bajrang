@@ -159,7 +159,7 @@ class GeminiProvider implements AIProvider {
   }
 
   async vision(msg: AIImageMessage): Promise<string> {
-    const model = this.model(true)
+    const model = this.model()
     const imagePart: Part = {
       inlineData: { mimeType: msg.mediaType, data: msg.imageBase64 },
     }

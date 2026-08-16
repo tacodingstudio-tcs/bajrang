@@ -45,7 +45,16 @@ interface PaymentReminderJob {
   draftMessage:string        // pre-drafted by AI, approved by owner
 }
 
-type WhatsAppJob = InvoiceShareJob | PaymentReminderJob
+// Plain text message — used for hotel guest comms (booking confirmation,
+// check-in day reminder, checkout thank-you). No template/approval step
+// needed since these go to the guest who just interacted with the business.
+interface HotelMessageJob {
+  type:    'hotel_message'
+  toPhone: string
+  message: string
+}
+
+type WhatsAppJob = InvoiceShareJob | PaymentReminderJob | HotelMessageJob
 
 // ── WABA API caller ───────────────────────────────────────────────────────────
 
@@ -129,6 +138,10 @@ async function handlePaymentReminder(job: PaymentReminderJob): Promise<void> {
   await sendWhatsAppText(job.toPhone, job.draftMessage)
 }
 
+async function handleHotelMessage(job: HotelMessageJob): Promise<void> {
+  await sendWhatsAppText(job.toPhone, job.message)
+}
+
 // ── Worker ────────────────────────────────────────────────────────────────────
 
 const worker = new Worker<WhatsAppJob>(
@@ -140,6 +153,8 @@ const worker = new Worker<WhatsAppJob>(
       await handleInvoiceShare(data)
     } else if (data.type === 'payment_reminder') {
       await handlePaymentReminder(data)
+    } else if (data.type === 'hotel_message') {
+      await handleHotelMessage(data)
     } else {
       throw new Error(`Unknown job type: ${(data as WhatsAppJob & { type: string }).type}`)
     }

@@ -23,6 +23,10 @@ function CreatePOModal({ onClose }: { onClose: () => void }) {
   const createPO     = useCreatePurchaseOrder()
   const { data: suppliersData } = useParties({ type: 'supplier', limit: 100 })
   const { data: productsData }  = useProducts({ limit: 500 })
+  // Menu dishes and services (e.g. "Butter Naan", "Airport Pickup") are
+  // priced catalog items, not physical goods a supplier ships — only
+  // trackStock items belong on a purchase order.
+  const stockedProducts = (productsData?.data ?? []).filter((p: any) => p.trackStock)
 
   const [partyId, setPartyId] = useState('')
   const [poDate, setPoDate]         = useState(new Date().toISOString().split('T')[0])
@@ -240,7 +244,7 @@ function CreatePOModal({ onClose }: { onClose: () => void }) {
                     aria-label="Product"
                   >
                     <option value="">— Type description —</option>
-                    {productsData?.data?.map((p: any) => (
+                    {stockedProducts.map((p: any) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>

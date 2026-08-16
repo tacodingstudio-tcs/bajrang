@@ -132,8 +132,14 @@ api.interceptors.response.use(
 // Return types are inferred — add explicit interfaces as needed.
 
 export const authApi = {
-  login: (phone: string, pin: string) =>
-    api.post('/auth/login', { tenantPhone: phone, phone, pin }).then((r) => r.data),
+  login: (tenantPhone: string, phone: string, pin: string) =>
+    api.post('/auth/login', { tenantPhone, phone, pin }).then((r) => r.data),
+
+  // Dev-only — powers the Login page's "Dev credentials" panel so newly
+  // created test users show up automatically. Backend returns 404 outside
+  // NODE_ENV !== 'production'.
+  devUsers: (): Promise<{ tenantPhone: string | null; users: { name: string; phone: string; role: string; pin: string }[] }> =>
+    api.get('/admin/dev-users').then((r) => r.data),
 
   refresh: (refreshToken: string) =>
     api.post('/auth/refresh', { refreshToken }).then((r) => r.data),
@@ -406,6 +412,22 @@ export const branchApi = {
     api.post(`/branches/${id}/activate`).then((r) => r.data),
 }
 
+export const featuresApi = {
+  get: () =>
+    api.get('/features').then((r) => r.data),
+
+  update: (data: { contractsEnabled?: boolean; deliveriesEnabled?: boolean }) =>
+    api.patch('/features', data).then((r) => r.data),
+}
+
+export const websiteApi = {
+  get: () =>
+    api.get('/website').then((r) => r.data),
+
+  updateSection: (section: string, data: unknown) =>
+    api.patch(`/website/${section}`, data).then((r) => r.data),
+}
+
 export const aiApi = {
   extractInvoice: (text: string) =>
     api.post('/ai/extract-invoice', { text }).then((r) => r.data),
@@ -520,6 +542,9 @@ export const reportsApi = {
     month: string; bankAccountId?: string
     statementBalance: number; bookBalance: number; notes?: string
   }) => api.post('/reports/bank-reconciliation', data).then((r) => r.data),
+
+  hotelOccupancy: (params: { from: string; to: string }) =>
+    api.get('/reports/hotel-occupancy', { params }).then((r) => r.data),
 }
 
 export const staffApi = {
@@ -606,6 +631,9 @@ export const usersApi = {
 
   update: (id: string, data: { name?: string; email?: string; role?: string; branchIds?: string[]; lang?: string }) =>
     api.patch(`/users/${id}`, data).then((r) => r.data),
+
+  setAiAccess: (id: string, aiEnabled: boolean) =>
+    api.patch(`/users/${id}/ai-access`, { aiEnabled }).then((r) => r.data),
 }
 
 export const broadcastApi = {
@@ -726,6 +754,8 @@ export const hotelApi = {
   // Bookings
   listBookings: (params?: Record<string, unknown>) =>
     api.get('/hotel/bookings', { params }).then((r) => r.data),
+  guestHistory: (phone: string, excludeBookingId?: string) =>
+    api.get('/hotel/guests/history', { params: { phone, excludeBookingId } }).then((r) => r.data),
   getBooking: (id: string) =>
     api.get(`/hotel/bookings/${id}`).then((r) => r.data),
   createBooking: (data: unknown) =>
@@ -742,6 +772,8 @@ export const hotelApi = {
   // Folio charges
   addCharge: (bookingId: string, data: unknown) =>
     api.post(`/hotel/bookings/${bookingId}/charges`, data).then((r) => r.data),
+  addChargesBulk: (bookingId: string, data: unknown) =>
+    api.post(`/hotel/bookings/${bookingId}/charges/bulk`, data).then((r) => r.data),
   removeCharge: (bookingId: string, chargeId: string) =>
     api.delete(`/hotel/bookings/${bookingId}/charges/${chargeId}`).then((r) => r.data),
 

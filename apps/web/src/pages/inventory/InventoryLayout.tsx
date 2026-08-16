@@ -1,13 +1,17 @@
 // src/pages/inventory/InventoryLayout.tsx
 import { NavLink, Outlet } from 'react-router-dom'
-import { BarChart2, ShoppingCart, ClipboardCheck, ArrowLeftRight, Package } from 'lucide-react'
+import { BarChart2, ShoppingCart, ClipboardCheck, Package, Building2 } from 'lucide-react'
 
+// Hotel-only deployment: Goods Receipts pairs with Purchase Orders (receiving
+// what was ordered from a supplier); Transfers is dropped — single-property,
+// no second branch to move stock to/from.
 const tabs = [
   { to: '/inventory/stock',           label: 'Stock Levels',    icon: BarChart2 },
   { to: '/inventory/products',        label: 'Products',        icon: Package },
+  { to: '/inventory/suppliers',       label: 'Suppliers',       icon: Building2 },
   { to: '/inventory/purchase-orders', label: 'Purchase Orders', icon: ShoppingCart },
   { to: '/inventory/adjustments',     label: 'Adjustments',     icon: ClipboardCheck },
-  { to: '/inventory/transfers',       label: 'Transfers',       icon: ArrowLeftRight },
+  { to: '/inventory/grn',             label: 'Goods Receipts',  icon: Package },
 ]
 
 export function InventoryLayout() {

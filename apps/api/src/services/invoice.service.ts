@@ -95,6 +95,8 @@ interface PartyInfo {
   id:         string
   gstin:      string | null
   address:    unknown
+  balance:    unknown
+  creditLimit: unknown
 }
 
 // =============================================================================
@@ -131,7 +133,7 @@ export async function createInvoice(
   if (input.partyId) {
     party = await ctx.db.party.findFirst({
       where: { id: input.partyId },
-      select: { id: true, gstin: true, address: true, balance: true, creditLimit: true } as any,
+      select: { id: true, gstin: true, address: true, balance: true, creditLimit: true },
     })
 
     if (!party) throw new Error('Party not found')

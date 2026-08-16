@@ -59,7 +59,7 @@ const DOMAIN_ROLE_NAMES: Record<string, { manager: string; cashier: string; view
   enterprise:     { manager: 'Branch Manager',       cashier: 'Accounts Executive',      viewer: 'Staff'             },
   // Food & hospitality
   restaurant:     { manager: 'Restaurant Manager',   cashier: 'Waiter / Counter Staff',  viewer: 'Kitchen Display'   },
-  hotel:          { manager: 'Hotel Manager',        cashier: 'Front Desk / Receptionist', viewer: 'Housekeeping'    },
+  hotel:          { manager: 'Hotel Manager',        cashier: 'Cashier',                 viewer: 'Housekeeping'    },
   catering:       { manager: 'Catering Manager',     cashier: 'Billing / Order Taker',   viewer: 'Kitchen Staff'     },
   tiffin:         { manager: 'Tiffin Manager',       cashier: 'Billing / Delivery',      viewer: 'Kitchen Staff'     },
   // Health & wellness
@@ -88,9 +88,10 @@ function getRoleNames(domainType?: string) {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  owner:   'bg-purple-100 text-purple-700',
-  manager: 'bg-blue-100 text-blue-700',
-  cashier: 'bg-green-100 text-green-700',
+  owner:      'bg-purple-100 text-purple-700',
+  manager:    'bg-blue-100 text-blue-700',
+  cashier:    'bg-green-100 text-green-700',
+  super_user: 'bg-amber-100 text-amber-700',
   viewer:  'bg-gray-100 text-gray-600',
 }
 
@@ -110,14 +111,31 @@ function BranchModal({ branch, onClose }: { branch?: any; onClose: () => void })
     address:    branch?.address?.line1 ?? '',
   })
 
+  const [seo, setSeo] = useState({
+    metaTitle:       branch?.domainConfig?.seo?.metaTitle       ?? '',
+    metaDescription: branch?.domainConfig?.seo?.metaDescription ?? '',
+    ogImageUrl:      branch?.domainConfig?.seo?.ogImageUrl      ?? '',
+  })
+
+  const showSeo = isEdit && form.domainType === 'hotel'
+
   async function handleSubmit() {
     if (!form.name.trim()) return
-    const payload = {
+    const payload: Record<string, unknown> = {
       name:       form.name.trim(),
       domainType: form.domainType,
       gstin:      form.gstin || undefined,
       city:       form.city  || undefined,
       address:    form.address ? { line1: form.address } : undefined,
+    }
+    if (showSeo) {
+      payload.domainConfig = {
+        seo: {
+          metaTitle:       seo.metaTitle.trim()       || undefined,
+          metaDescription: seo.metaDescription.trim() || undefined,
+          ogImageUrl:      seo.ogImageUrl.trim()       || undefined,
+        },
+      }
     }
     if (isEdit) {
       await updateBranch.mutateAsync({ id: branch.id, ...payload })
@@ -182,6 +200,38 @@ function BranchModal({ branch, onClose }: { branch?: any; onClose: () => void })
             <input className="input" placeholder="Shop no., Street, Area" value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })} />
           </div>
+
+          {showSeo && (
+            <div className="pt-3 border-t border-gray-100">
+              <label className="label mb-2">Website SEO</label>
+              <p className="text-xs text-gray-400 mb-3">
+                Controls how the public website appears in search results and when shared.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="label text-xs">Meta title</label>
+                  <input className="input" placeholder="Bajrang Stay Inn — Kodinar"
+                    maxLength={70} value={seo.metaTitle}
+                    onChange={(e) => setSeo({ ...seo, metaTitle: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label text-xs">Meta description</label>
+                  <textarea className="input" rows={3} maxLength={160}
+                    placeholder="A quiet hotel stay in Kodinar, Gujarat — minutes from Somnath Temple."
+                    value={seo.metaDescription}
+                    onChange={(e) => setSeo({ ...seo, metaDescription: e.target.value })} />
+                  <p className="text-xs text-gray-400 mt-1">{seo.metaDescription.length}/160 characters</p>
+                </div>
+                <div>
+                  <label className="label text-xs">Share image URL</label>
+                  <input className="input" placeholder="https://…/og-image.jpg"
+                    value={seo.ogImageUrl}
+                    onChange={(e) => setSeo({ ...seo, ogImageUrl: e.target.value })} />
+                  <p className="text-xs text-gray-400 mt-1">Shown as the preview image when the site link is shared.</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 mt-6">
@@ -310,6 +360,7 @@ function AddUserModal({ branches, domainType, onClose }: { branches: any[]; doma
               <option value="cashier">{rn.cashier} — create invoices, record payments</option>
               <option value="manager">{rn.manager} — full access except owner settings</option>
               <option value="viewer">{rn.viewer} — read-only access</option>
+              <option value="super_user">Super User — Website, AI Assistant, and POS Settings only</option>
             </select>
           </div>
 
@@ -459,7 +510,7 @@ function UsersPanel({ branches, domainType, onBack }: { branches: any[]; domainT
                     <span className="text-sm font-medium text-gray-900">{u.name}</span>
                     {isSelf && <span className="text-xs bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full">You</span>}
                     <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${ROLE_COLORS[u.role] ?? 'bg-gray-100 text-gray-600'}`}>
-                      {u.role === 'owner' ? 'Owner' : u.role === 'manager' ? rn.manager : u.role === 'viewer' ? rn.viewer : rn.cashier}
+                      {u.role === 'owner' ? 'Owner' : u.role === 'super_user' ? 'Super User' : u.role === 'manager' ? rn.manager : u.role === 'viewer' ? rn.viewer : rn.cashier}
                     </span>
                     {!u.isActive && (
                       <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Inactive</span>

@@ -4,15 +4,28 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Brand colours — adjust to your preference
+        // Brand colours — matches the public website's maroon/gold palette
         primary: {
-          50:  '#f0fdf4',
-          100: '#dcfce7',
-          500: '#22c55e',
-          600: '#16a34a',
-          700: '#15803d',
-          800: '#166534',
-          900: '#14532d',
+          50:  '#fbf1f1',
+          100: '#f1dcdd',
+          200: '#dfb3b6',
+          300: '#c68488',
+          400: '#a85459',
+          500: '#8c363c',
+          600: '#722931',
+          700: '#5a1f26',
+          800: '#45181d',
+          900: '#331215',
+        },
+        gold: {
+          50:  '#fbf8ef',
+          100: '#f2e8cc',
+          200: '#e3ce97',
+          300: '#d1ac65',
+          400: '#c19643',
+          500: '#a97f34',
+          600: '#8c6829',
+          700: '#6f5121',
         },
       },
       fontFamily: {

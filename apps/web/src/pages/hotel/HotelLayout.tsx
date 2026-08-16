@@ -1,6 +1,7 @@
 // Hotel section layout with sub-navigation tabs
 import { NavLink, Outlet } from 'react-router-dom'
 import { LayoutDashboard, CalendarDays, BedDouble, Sparkles, ClipboardList, Moon } from 'lucide-react'
+import { useAuthStore } from '@/store/auth.store'
 
 const SUB_NAV = [
   { to: '/hotel',              label: 'Front Desk',   icon: LayoutDashboard, end: true },
@@ -11,13 +12,20 @@ const SUB_NAV = [
   { to: '/hotel/night-audit',  label: 'Night Audit',  icon: Moon },
 ]
 
+// viewer (housekeeping) only has server-side access to /hotel/housekeeping
+// and /hotel/rooms (read-only) — the other tabs would just 403.
+const VIEWER_TABS = new Set(['/hotel/housekeeping', '/hotel/rooms'])
+
 export function HotelLayout() {
+  const isViewer = useAuthStore((s) => s.user?.role === 'viewer')
+  const tabs = isViewer ? SUB_NAV.filter((t) => VIEWER_TABS.has(t.to)) : SUB_NAV
+
   return (
     <div className="flex flex-col h-full">
       {/* Sub-nav */}
       <div className="bg-white border-b border-gray-200 px-6">
         <div className="flex gap-1 overflow-x-auto">
-          {SUB_NAV.map(({ to, label, icon: Icon, end }) => (
+          {tabs.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}

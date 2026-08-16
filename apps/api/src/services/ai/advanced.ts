@@ -50,6 +50,7 @@ Respond with:
   })
 
   const raw = parseAIJson<ExpenseCategoryResult>(text)
+  if (!raw) return { category: 'miscellaneous', confidence: 0.5, reason: '', suggestedGlCode: undefined }
   return {
     category: EXPENSE_CATEGORIES.includes(raw.category as ExpenseCategory)
       ? (raw.category as ExpenseCategory)
@@ -186,8 +187,8 @@ Respond ONLY with JSON:
   return {
     currentBalance: 0, // would need bank account integration
     days,
-    summary:  aiData.summary  ?? 'Forecast based on historical averages.',
-    topRisks: aiData.topRisks ?? [],
+    summary:  aiData?.summary  ?? 'Forecast based on historical averages.',
+    topRisks: aiData?.topRisks ?? [],
   }
 }
 
@@ -251,7 +252,7 @@ export async function findPartyDuplicates(
   for (const g of gstinGroups) {
     // Skip if already caught by phone group
     const ids = g.ids.split(',')
-    const alreadyCovered = groups.some((gr) => ids.some((id) => gr.ids.includes(id)))
+    const alreadyCovered = groups.some((gr) => ids.some((id: string) => gr.ids.includes(id)))
     if (!alreadyCovered) {
       groups.push({
         ids,

@@ -16,7 +16,7 @@ const DRY_RUN = process.argv.includes('--dry-run')
 
 import { PrismaClient } from '@prisma/client'
 
-const DB_URL = 'postgresql://billing_app:localdev123@localhost:5432/billing_db'
+const DB_URL = 'postgresql://hotel_app:localdev123@localhost:5433/hotel_db'
 
 async function main() {
   const db = new PrismaClient({ datasources: { db: { url: DB_URL } } })
@@ -66,7 +66,7 @@ async function main() {
   const remaining = await db.$queryRawUnsafe<Array<{ cnt: bigint }>>(
     `SELECT COUNT(*) as cnt FROM public.tenants`
   )
-  console.log(`\nDone. ${remaining[0].cnt} tenants remain in the database.`)
+  console.log(`\nDone. ${remaining[0]?.cnt ?? 0} tenants remain in the database.`)
 
   await db.$disconnect()
 }

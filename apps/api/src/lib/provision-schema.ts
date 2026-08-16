@@ -35,38 +35,6 @@ async function runDDL(schemaName: string, statements: string[]): Promise<void> {
 export async function provisionTenantSchema(schemaName: string): Promise<void> {
     // ── 1. Create missing tables ─────────────────────────────────────────────
     await runDDL(schemaName, [
-      // ── Restaurant extension tables ───────────────────────────────────────
-      `CREATE TABLE IF NOT EXISTS "restaurant_tables" (
-  "id"                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"          UUID        NOT NULL,
-  "tableNo"           TEXT        NOT NULL,
-  "capacity"          INTEGER     NOT NULL DEFAULT 4,
-  "section"           TEXT,
-  "status"            TEXT        NOT NULL DEFAULT 'available'
-                                    CHECK (status IN ('available','occupied','reserved','cleaning')),
-  "currentInvoiceId"  UUID,
-  "openedAt"          TIMESTAMPTZ,
-  "guestCount"        INTEGER     NOT NULL DEFAULT 0,
-  "notes"             TEXT,
-  "isActive"          BOOLEAN     DEFAULT true,
-  "createdAt"         TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE ("branchId", "tableNo")
-)`,
-      `CREATE TABLE IF NOT EXISTS "kot_orders" (
-  "id"          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"    UUID        NOT NULL,
-  "tableId"     UUID,
-  "invoiceId"   UUID,
-  "kotNo"       TEXT        NOT NULL,
-  "station"     TEXT        NOT NULL DEFAULT 'hot_kitchen',
-  "status"      TEXT        NOT NULL DEFAULT 'pending'
-                              CHECK (status IN ('pending','acknowledged','preparing','ready','served','cancelled')),
-  "notes"       TEXT,
-  "items"       JSONB       NOT NULL DEFAULT '[]',
-  "servedAt"    TIMESTAMPTZ,
-  "createdAt"   TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"   TIMESTAMPTZ DEFAULT NOW()
-)`,
       // ── Hotel extension tables ────────────────────────────────────────────
       `CREATE TABLE IF NOT EXISTS "hotel_rooms" (
   "id"            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -84,12 +52,18 @@ export async function provisionTenantSchema(schemaName: string): Promise<void> {
   "hasWifi"       BOOLEAN     DEFAULT true,
   "viewType"      TEXT,
   "amenities"     TEXT[],
+  "imageUrl"      TEXT,
+  "images"        TEXT[],
+  "description"   TEXT,
   "status"        TEXT        NOT NULL DEFAULT 'available'
                                 CHECK (status IN ('available','occupied','dirty','maintenance','blocked')),
   "notes"         TEXT,
   "isActive"      BOOLEAN     DEFAULT true,
   "createdAt"     TIMESTAMPTZ DEFAULT NOW()
 )`,
+      `ALTER TABLE "hotel_rooms" ADD COLUMN IF NOT EXISTS "imageUrl" TEXT`,
+      `ALTER TABLE "hotel_rooms" ADD COLUMN IF NOT EXISTS "images" TEXT[]`,
+      `ALTER TABLE "hotel_rooms" ADD COLUMN IF NOT EXISTS "description" TEXT`,
       `CREATE TABLE IF NOT EXISTS "hotel_bookings" (
   "id"              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   "branchId"        UUID        NOT NULL,
@@ -101,6 +75,7 @@ export async function provisionTenantSchema(schemaName: string): Promise<void> {
   "nationality"     TEXT        DEFAULT 'Indian',
   "idType"          TEXT,
   "idNumber"        TEXT,
+  "idImages"        TEXT[],
   "adults"          INTEGER     NOT NULL DEFAULT 1,
   "children"        INTEGER     NOT NULL DEFAULT 0,
   "checkIn"         TIMESTAMPTZ NOT NULL,
@@ -116,6 +91,7 @@ export async function provisionTenantSchema(schemaName: string): Promise<void> {
   "status"          TEXT        NOT NULL DEFAULT 'reserved'
                                   CHECK (status IN ('reserved','checked_in','checked_out','cancelled','no_show')),
   "formCFiled"      BOOLEAN     DEFAULT false,
+  "reminderSent"    BOOLEAN     DEFAULT false,
   "notes"           TEXT,
   "createdBy"       UUID,
   "partyId"         UUID,
@@ -123,13 +99,19 @@ export async function provisionTenantSchema(schemaName: string): Promise<void> {
   "createdAt"       TIMESTAMPTZ DEFAULT NOW(),
   "updatedAt"       TIMESTAMPTZ DEFAULT NOW()
 )`,
+      `ALTER TABLE "hotel_bookings" ADD COLUMN IF NOT EXISTS "idImages" TEXT[]`,
+      // Tracks whether the automated check-in-day WhatsApp reminder has
+      // already gone out — the daily hotel worker checks this to avoid
+      // sending the same guest the reminder more than once.
+      `ALTER TABLE "hotel_bookings" ADD COLUMN IF NOT EXISTS "reminderSent" BOOLEAN DEFAULT false`,
       `CREATE TABLE IF NOT EXISTS "hotel_folio_charges" (
   "id"          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   "bookingId"   UUID        NOT NULL,
   "branchId"    UUID        NOT NULL,
   "chargeType"  TEXT        NOT NULL DEFAULT 'other'
-                              CHECK ("chargeType" IN ('room','food','laundry','minibar','spa','transport','telephone','other')),
+                              CHECK ("chargeType" IN ('room','food','service','laundry','minibar','spa','transport','telephone','other')),
   "description" TEXT        NOT NULL,
+  "productId"   UUID,
   "qty"         DECIMAL(8,2) NOT NULL DEFAULT 1,
   "rate"        DECIMAL(12,2) NOT NULL,
   "amount"      DECIMAL(12,2) NOT NULL,
@@ -138,6 +120,9 @@ export async function provisionTenantSchema(schemaName: string): Promise<void> {
   "addedBy"     UUID,
   "createdAt"   TIMESTAMPTZ DEFAULT NOW()
 )`,
+      `ALTER TABLE "hotel_folio_charges" ADD COLUMN IF NOT EXISTS "productId" UUID`,
+      `ALTER TABLE "hotel_folio_charges" DROP CONSTRAINT IF EXISTS "hotel_folio_charges_chargeType_check"`,
+      `ALTER TABLE "hotel_folio_charges" ADD CONSTRAINT "hotel_folio_charges_chargeType_check" CHECK ("chargeType" IN ('room','food','service','laundry','minibar','spa','transport','telephone','other'))`,
       `CREATE TABLE IF NOT EXISTS "hotel_housekeeping" (
   "id"            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   "branchId"      UUID        NOT NULL,
@@ -154,6 +139,15 @@ export async function provisionTenantSchema(schemaName: string): Promise<void> {
   "scheduledFor"  DATE        NOT NULL DEFAULT CURRENT_DATE,
   "completedAt"   TIMESTAMPTZ,
   "createdAt"     TIMESTAMPTZ DEFAULT NOW()
+)`,
+      `CREATE TABLE IF NOT EXISTS "hotel_website_content" (
+  "id"          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  "branchId"    UUID        NOT NULL,
+  "section"     TEXT        NOT NULL,
+  "data"        JSONB       NOT NULL DEFAULT '{}',
+  "updatedAt"   TIMESTAMPTZ DEFAULT NOW(),
+  "createdAt"   TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE ("branchId", "section")
 )`,
       `CREATE TABLE IF NOT EXISTS "brands" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -684,208 +678,8 @@ export async function provisionTenantSchema(schemaName: string): Promise<void> {
 )`,
     ])
 
-    // ── clinic patient history tables ────────────────────────────────────────
+    // ── shared AI infra table ─────────────────────────────────────────────────
     await runDDL(schemaName, [
-      `CREATE TABLE IF NOT EXISTS "clinic_visits" (
-  "id"           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"     UUID        NOT NULL,
-  "partyId"      UUID        NOT NULL,
-  "visitDate"    DATE        NOT NULL,
-  "doctorName"   TEXT,
-  "complaint"    TEXT,
-  "diagnosis"    TEXT,
-  "vitals"       JSONB       NOT NULL DEFAULT '{}',
-  "prescription" JSONB       NOT NULL DEFAULT '[]',
-  "followUpDate" DATE,
-  "notes"        TEXT,
-  "createdBy"    UUID        NOT NULL,
-  "createdAt"    TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"    TIMESTAMPTZ DEFAULT NOW()
-)`,
-      `CREATE TABLE IF NOT EXISTS "clinic_documents" (
-  "id"        UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"  UUID        NOT NULL,
-  "partyId"   UUID        NOT NULL,
-  "title"     TEXT        NOT NULL,
-  "docType"   TEXT        NOT NULL DEFAULT 'other',
-  "url"       TEXT        NOT NULL,
-  "docDate"   DATE,
-  "notes"     TEXT,
-  "createdBy" UUID        NOT NULL,
-  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
-)`,
-    ])
-
-    // ── coaching progress tables ──────────────────────────────────────────────
-    await runDDL(schemaName, [
-      `CREATE TABLE IF NOT EXISTS "student_notes" (
-  "id"          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"    UUID        NOT NULL,
-  "partyId"     UUID        NOT NULL,
-  "noteDate"    DATE        NOT NULL,
-  "subject"     TEXT,
-  "covered"     TEXT        NOT NULL,
-  "nextSession" TEXT,
-  "createdBy"   UUID        NOT NULL,
-  "createdAt"   TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"   TIMESTAMPTZ DEFAULT NOW()
-)`,
-      `CREATE TABLE IF NOT EXISTS "student_weekly_reviews" (
-  "id"            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"      UUID        NOT NULL,
-  "partyId"       UUID        NOT NULL,
-  "weekStart"     DATE        NOT NULL,
-  "overallRating" INTEGER     NOT NULL DEFAULT 3,
-  "strengths"     TEXT,
-  "weaknesses"    TEXT,
-  "parentNote"    TEXT,
-  "targets"       TEXT,
-  "createdBy"     UUID        NOT NULL,
-  "createdAt"     TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"     TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE ("branchId", "partyId", "weekStart")
-)`,
-      `CREATE TABLE IF NOT EXISTS "student_exams" (
-  "id"             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"       UUID        NOT NULL,
-  "examDate"       DATE        NOT NULL,
-  "subject"        TEXT        NOT NULL,
-  "examType"       TEXT        NOT NULL DEFAULT 'weekly',
-  "maxMarks"       INTEGER     NOT NULL DEFAULT 100,
-  "batchName"      TEXT,
-  "notes"          TEXT,
-  "weekId"         UUID,
-  "generatedPaper" JSONB       NOT NULL DEFAULT '{}',
-  "questions"      JSONB       NOT NULL DEFAULT '[]',
-  "createdBy"      UUID        NOT NULL,
-  "createdAt"      TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"      TIMESTAMPTZ DEFAULT NOW()
-)`,
-      `CREATE TABLE IF NOT EXISTS "student_exam_scores" (
-  "id"             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-  "examId"         UUID         NOT NULL,
-  "branchId"       UUID         NOT NULL,
-  "partyId"        UUID         NOT NULL,
-  "marksObtained"  DECIMAL(6,2),
-  "questionMarks"  JSONB        NOT NULL DEFAULT '{}',
-  "errorTypes"     JSONB        NOT NULL DEFAULT '{}',
-  "aiNotes"        TEXT,
-  "answerSheetUrl" TEXT,
-  "remarks"        TEXT,
-  "createdAt"      TIMESTAMPTZ  DEFAULT NOW(),
-  "updatedAt"      TIMESTAMPTZ  DEFAULT NOW(),
-  UNIQUE ("examId", "partyId")
-)`,
-      `CREATE TABLE IF NOT EXISTS "coaching_monthly_plans" (
-  "id"        UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"  UUID        NOT NULL,
-  "batchName" TEXT        NOT NULL,
-  "subject"   TEXT        NOT NULL,
-  "monthYear" TEXT        NOT NULL,
-  "notes"     TEXT,
-  "createdBy" UUID        NOT NULL,
-  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt" TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE ("branchId", "batchName", "subject", "monthYear")
-)`,
-      `CREATE TABLE IF NOT EXISTS "coaching_plan_weeks" (
-  "id"         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "planId"     UUID        NOT NULL,
-  "weekNumber" INTEGER     NOT NULL,
-  "title"      TEXT,
-  "topics"     JSONB       NOT NULL DEFAULT '[]',
-  "notes"      TEXT,
-  "createdAt"  TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"  TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE ("planId", "weekNumber")
-)`,
-      `CREATE TABLE IF NOT EXISTS "coaching_topic_mastery" (
-  "id"           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"     UUID        NOT NULL,
-  "partyId"      UUID        NOT NULL,
-  "subject"      TEXT        NOT NULL,
-  "topic"        TEXT        NOT NULL,
-  "masteryLevel" INTEGER     NOT NULL DEFAULT 0,
-  "notes"        TEXT,
-  "updatedBy"    UUID        NOT NULL,
-  "createdAt"    TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"    TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE ("branchId", "partyId", "subject", "topic")
-)`,
-      `CREATE TABLE IF NOT EXISTS "robotics_projects" (
-  "id"             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"       UUID        NOT NULL,
-  "title"          TEXT        NOT NULL,
-  "description"    TEXT,
-  "category"       TEXT        NOT NULL DEFAULT 'Mixed',
-  "batchName"      TEXT,
-  "standard"       TEXT,
-  "targetEvent"    TEXT,
-  "eventDate"      TIMESTAMPTZ,
-  "phases"         JSONB       NOT NULL DEFAULT '[]',
-  "phaseChecklist" JSONB       NOT NULL DEFAULT '{}',
-  "planId"         UUID,
-  "phaseKits"      JSONB       NOT NULL DEFAULT '{}',
-  "status"         TEXT        NOT NULL DEFAULT 'active',
-  "createdBy"      UUID        NOT NULL,
-  "createdAt"      TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"      TIMESTAMPTZ DEFAULT NOW()
-)`,
-      `CREATE TABLE IF NOT EXISTS "student_robotics_progress" (
-  "id"           UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"     UUID    NOT NULL,
-  "projectId"    UUID    NOT NULL REFERENCES "robotics_projects"("id") ON DELETE CASCADE,
-  "partyId"      UUID    NOT NULL,
-  "teamName"     TEXT,
-  "currentPhase" INTEGER NOT NULL DEFAULT 0,
-  "phaseChecks"  JSONB   NOT NULL DEFAULT '{}',
-  "components"   JSONB   NOT NULL DEFAULT '{}',
-  "ratings"      JSONB   NOT NULL DEFAULT '{}',
-  "presentation" JSONB   NOT NULL DEFAULT '{}',
-  "tutorNotes"   TEXT,
-  "createdAt"    TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"    TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE ("projectId", "partyId")
-)`,
-      `CREATE TABLE IF NOT EXISTS "robotics_components" (
-  "id"        UUID  PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"  UUID  NOT NULL,
-  "name"      TEXT  NOT NULL,
-  "category"  TEXT,
-  "totalQty"  INTEGER NOT NULL DEFAULT 1,
-  "notes"     TEXT,
-  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE ("branchId", "name")
-)`,
-      `CREATE TABLE IF NOT EXISTS "coaching_experiment_prep" (
-  "id"          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"    UUID        NOT NULL,
-  "weekId"      UUID        NOT NULL,
-  "subject"     TEXT        NOT NULL,
-  "topic"       TEXT        NOT NULL,
-  "itemStatus"  JSONB       NOT NULL DEFAULT '{}',
-  "prepDone"    BOOLEAN     NOT NULL DEFAULT false,
-  "prepNotes"   TEXT,
-  "createdAt"   TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"   TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE ("branchId", "weekId", "topic")
-)`,
-      `CREATE TABLE IF NOT EXISTS "coaching_topic_notes" (
-  "id"          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  "branchId"    UUID        NOT NULL,
-  "board"       TEXT,
-  "standard"    TEXT,
-  "subject"     TEXT        NOT NULL,
-  "topic"       TEXT        NOT NULL,
-  "content"     JSONB       NOT NULL DEFAULT '{}',
-  "rawText"     TEXT,
-  "generatedBy" TEXT        NOT NULL DEFAULT 'gemini',
-  "createdBy"   UUID        NOT NULL,
-  "createdAt"   TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt"   TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE ("branchId", "subject", "topic")
-)`,
       `CREATE TABLE IF NOT EXISTS "ai_suggestions" (
   "id"         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   "branchId"   UUID,
@@ -1192,9 +986,9 @@ export async function seedDomainCategories(
   branchId: string,
   domainType: string,
 ): Promise<void> {
-  const cats = DOMAIN_CATEGORIES[domainType] ?? DOMAIN_CATEGORIES['_default']
+  const cats = DOMAIN_CATEGORIES[domainType] ?? DOMAIN_CATEGORIES['_default']!
   for (let i = 0; i < cats.length; i++) {
-    const c = cats[i]
+    const c = cats[i]!
     await db.$executeRawUnsafe(
       `INSERT INTO categories ("id","branchId","name","slug","icon","sortOrder","isActive","createdAt")
        VALUES (gen_random_uuid(), $1::uuid, $2, $3, $4, $5, true, NOW())

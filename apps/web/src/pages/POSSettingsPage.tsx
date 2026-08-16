@@ -3,6 +3,8 @@
 
 import { useState } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { useFeatures, useUpdateFeatures } from '@/hooks/useApi'
+import { useAuthStore } from '@/store/auth.store'
 
 type Setting = {
   key: string
@@ -59,6 +61,76 @@ function getVal(key: string, def: string) {
   return localStorage.getItem(key) ?? def
 }
 
+function FeatureToggleRow({
+  label, description, checked, onToggle, disabled,
+}: {
+  label: string
+  description: string
+  checked: boolean
+  onToggle: () => void
+  disabled: boolean
+}) {
+  return (
+    <div className="card p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold text-gray-900">{label}</h3>
+          <p className="text-xs text-gray-500 mt-1 leading-relaxed">{description}</p>
+        </div>
+        <div className="flex-shrink-0 mt-0.5">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            onClick={onToggle}
+            disabled={disabled}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
+              checked ? 'bg-primary-600' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm transform transition-transform ${
+                checked ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FeatureModulesCard() {
+  const role = useAuthStore((s) => s.user?.role)
+  const canManage = role === 'owner' || role === 'super_user'
+  const { data: features } = useFeatures()
+  const updateFeatures = useUpdateFeatures()
+
+  // Not owner/super_user — this section is admin-only, matching the
+  // server-side restriction on changing it, so hide it entirely rather
+  // than show a control that would just 403.
+  if (!canManage) return null
+
+  return (
+    <>
+      <FeatureToggleRow
+        label="Contracts & Recurring Billing"
+        description="Hidden from the sidebar by default. Turn this on if you actually use AMC/subscription-style recurring billing — otherwise it's just clutter."
+        checked={features?.contractsEnabled ?? false}
+        onToggle={() => updateFeatures.mutate({ contractsEnabled: !(features?.contractsEnabled ?? false) })}
+        disabled={updateFeatures.isPending}
+      />
+      <FeatureToggleRow
+        label="Deliveries"
+        description="Hidden from the sidebar by default. Turn this on if you track outbound deliveries — otherwise it's just clutter."
+        checked={features?.deliveriesEnabled ?? false}
+        onToggle={() => updateFeatures.mutate({ deliveriesEnabled: !(features?.deliveriesEnabled ?? false) })}
+        disabled={updateFeatures.isPending}
+      />
+    </>
+  )
+}
+
 export function POSSettingsPage() {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
@@ -85,6 +157,8 @@ export function POSSettingsPage() {
       <PageHeader title="POS Settings" subtitle="Hardware and display configuration for your point of sale" />
 
       <div className="p-8 max-w-2xl space-y-6">
+        <FeatureModulesCard />
+
         {SETTINGS.map(setting => (
           <div key={setting.key} className="card p-5">
             <div className="flex items-start justify-between gap-4">

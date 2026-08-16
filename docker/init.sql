@@ -18,33 +18,33 @@ CREATE EXTENSION IF NOT EXISTS "btree_gin";
 -- ── APP ROLE ──────────────────────────────────────────────────────────────────
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'billing_app') THEN
-    CREATE ROLE billing_app LOGIN PASSWORD 'localdev123';
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'hotel_app') THEN
+    CREATE ROLE hotel_app LOGIN PASSWORD 'localdev123';
   END IF;
 END $$;
 
-GRANT CONNECT ON DATABASE billing_db TO billing_app;
-GRANT USAGE  ON SCHEMA public TO billing_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO billing_app;
-GRANT USAGE  ON ALL SEQUENCES IN SCHEMA public TO billing_app;
+GRANT CONNECT ON DATABASE hotel_db TO hotel_app;
+GRANT USAGE  ON SCHEMA public TO hotel_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO hotel_app;
+GRANT USAGE  ON ALL SEQUENCES IN SCHEMA public TO hotel_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO billing_app;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hotel_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT USAGE ON SEQUENCES TO billing_app;
+  GRANT USAGE ON SEQUENCES TO hotel_app;
 
 -- ── READ-ONLY ROLE ────────────────────────────────────────────────────────────
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'billing_readonly') THEN
-    CREATE ROLE billing_readonly LOGIN PASSWORD 'localdev_readonly';
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'hotel_readonly') THEN
+    CREATE ROLE hotel_readonly LOGIN PASSWORD 'localdev_readonly';
   END IF;
 END $$;
 
-GRANT CONNECT ON DATABASE billing_db TO billing_readonly;
-GRANT USAGE  ON SCHEMA public TO billing_readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO billing_readonly;
+GRANT CONNECT ON DATABASE hotel_db TO hotel_readonly;
+GRANT USAGE  ON SCHEMA public TO hotel_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO hotel_readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT ON TABLES TO billing_readonly;
+  GRANT SELECT ON TABLES TO hotel_readonly;
 
 -- ── PUBLIC SCHEMA TABLES ──────────────────────────────────────────────────────
 -- refresh_tokens lives here. tenants is managed by Prisma migration.
@@ -79,11 +79,11 @@ RETURNS VOID LANGUAGE plpgsql AS $$
 BEGIN
   -- Create schema and grant access
   EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', p_schema);
-  EXECUTE format('GRANT USAGE ON SCHEMA %I TO billing_app', p_schema);
-  EXECUTE format('GRANT USAGE ON SCHEMA %I TO billing_readonly', p_schema);
-  EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO billing_app', p_schema);
-  EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I GRANT SELECT ON TABLES TO billing_readonly', p_schema);
-  EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I GRANT USAGE ON SEQUENCES TO billing_app', p_schema);
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO hotel_app', p_schema);
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO hotel_readonly', p_schema);
+  EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hotel_app', p_schema);
+  EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I GRANT SELECT ON TABLES TO hotel_readonly', p_schema);
+  EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I GRANT USAGE ON SEQUENCES TO hotel_app', p_schema);
 
   -- ── branches ───────────────────────────────────────────────────────────────
   EXECUTE format('
@@ -112,6 +112,7 @@ BEGIN
       pin         TEXT,
       lang        TEXT        NOT NULL DEFAULT ''hi'',
       "isActive"  BOOLEAN     NOT NULL DEFAULT TRUE,
+      "aiEnabled" BOOLEAN     NOT NULL DEFAULT FALSE,
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )', p_schema);
@@ -687,9 +688,9 @@ END;
 $$;
 
 -- Grant execute to app role
-GRANT EXECUTE ON FUNCTION public.create_tenant_schema(TEXT) TO billing_app;
+GRANT EXECUTE ON FUNCTION public.create_tenant_schema(TEXT) TO hotel_app;
 
 DO $$
 BEGIN
-  RAISE NOTICE 'billing_db initialized: roles, extensions, create_tenant_schema() ready.';
+  RAISE NOTICE 'hotel_db initialized: roles, extensions, create_tenant_schema() ready.';
 END $$;

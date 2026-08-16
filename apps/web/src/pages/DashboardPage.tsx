@@ -36,6 +36,14 @@ function periodRange(period: string) {
 export function DashboardPage() {
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d')
   const domainType = useAuthStore((s) => s.branch?.domainType as string | undefined)
+  const user = useAuthStore((s) => s.user)
+  // AI Assistant: owner/super_user always; everyone else needs the per-user
+  // aiEnabled toggle, and cashier is never eligible regardless (matches the
+  // server-side rule in routes/ai.ts).
+  const canUseAI = user?.role === 'owner' || user?.role === 'super_user'
+    || (user?.role !== 'cashier' && !!user?.aiEnabled)
+  // Reports: cashier is blocked server-side (routes/reports.ts).
+  const canUseReports = user?.role !== 'cashier'
 
   // Domains that carry physical inventory — show low-stock + reorder widgets
   const INVENTORY_DOMAINS = new Set([
@@ -66,10 +74,10 @@ export function DashboardPage() {
   const { data: udhaar }       = useUdhaarSummary()
   const { data: recentInvoices } = useInvoices({ limit: 5 })
   const { data: weeklyData, isLoading: weeklyLoading } = useWeeklySummary()
-  const { data: aiInsight }    = useAIInsight()
-  const { data: reorderData }  = useReorderSuggestions()
+  const { data: aiInsight }    = useAIInsight({ enabled: canUseAI })
+  const { data: reorderData }  = useReorderSuggestions({ enabled: canUseAI })
 
-  const { data: monthly } = useMonthlyComparison()
+  const { data: monthly } = useMonthlyComparison({ enabled: canUseReports })
 
   const { data: analytics, isLoading: analyticsLoading } = useAnalyticsDashboard({
     period, compareWith: 'prev_period',

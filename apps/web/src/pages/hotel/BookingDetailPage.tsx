@@ -2,16 +2,28 @@
 import { useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { hotelApi } from '@/lib/api'
+import { hotelApi, productApi, categoryApi } from '@/lib/api'
 import {
   ArrowLeft, LogIn, LogOut, Plus, Trash2, BedDouble,
-  User, Phone, Mail, Globe, CreditCard, Utensils, Package,
+  User, Phone, Mail, Globe, CreditCard, Utensils, Package, Upload, Minus, ChefHat, Sparkles,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+
+const MAX_ID_UPLOAD_BYTES = 700_000 // matches the server-side per-image cap
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
 const CHARGE_TYPE_ICONS: Record<string, React.ElementType> = {
   room:      BedDouble,
   food:      Utensils,
+  service:   Sparkles,
   laundry:   Package,
   minibar:   Package,
   spa:       User,
@@ -20,107 +32,318 @@ const CHARGE_TYPE_ICONS: Record<string, React.ElementType> = {
   other:     Package,
 }
 
+// Selectable in the "Other Charge" dropdown. Deliberately excludes 'minibar'
+// and 'spa' — not offered as facilities here — while keeping them in
+// CHARGE_TYPE_ICONS above so any pre-existing charges of that type (from
+// before this change, or from a tenant that does offer them) still render
+// a proper icon instead of falling through to nothing.
 const CHARGE_TYPES = [
-  'room','food','laundry','minibar','spa','transport','telephone','other',
+  'room','food','laundry','transport','telephone','other',
 ]
 
-function AddChargeModal({ bookingId, onClose }: { bookingId: string; onClose: () => void }) {
-  const queryClient = useQueryClient()
+type CartLine = {
+  key: string // productId for menu items, a generated id for custom charges
+  chargeType: string
+  description: string
+  productId?: string
+  rate: number
+  gstRate: number
+  qty: number
+}
+
+// ── Category-backed menu picker — feeds into the shared cart below. Its own
+// scroll region, capped, so a long list never pushes the cart (and its qty
+// controls) out of view. Used for both Food and Services, each pointed at
+// its own product category.
+function CategoryMenuPicker({
+  categoryMatch, emptyIcon: EmptyIcon, emptyLabel, emptyHint, searchPlaceholder, onAdd,
+}: {
+  categoryMatch: RegExp
+  emptyIcon: React.ElementType
+  emptyLabel: string
+  emptyHint: string
+  searchPlaceholder: string
+  onAdd: (p: any) => void
+}) {
+  const [search, setSearch] = useState('')
+
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn:  () => categoryApi.list(),
+  })
+  const category = (categories ?? []).find((c: any) =>
+    categoryMatch.test(c.name) || categoryMatch.test(c.slug ?? '')
+  )
+
+  const { data: productsData, isLoading } = useQuery({
+    queryKey: ['products', 'menu', category?.id],
+    queryFn:  () => productApi.list({ categoryId: category.id, isActive: true, limit: 200 }),
+    enabled:  !!category,
+  })
+  const menuItems: any[] = (productsData as any)?.data ?? []
+  const filtered = search
+    ? menuItems.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+    : menuItems
+
+  if (category && !isLoading && menuItems.length === 0) {
+    return (
+      <div className="py-6 text-center">
+        <EmptyIcon className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+        <p className="text-sm text-gray-500 mb-1">{emptyLabel}</p>
+        <p className="text-xs text-gray-400">{emptyHint}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <input
+        className="input"
+        placeholder={searchPlaceholder}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+      {isLoading ? (
+        <div className="text-center py-6 text-gray-400 text-sm">Loading…</div>
+      ) : (
+        <div className="max-h-40 overflow-y-auto space-y-0.5 border border-gray-100 rounded-lg p-1">
+          {filtered.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onAdd(p)}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md hover:bg-gray-50 text-left"
+            >
+              <span className="text-sm text-gray-800">{p.name}</span>
+              <span className="text-sm text-gray-500">₹{Number(p.salePrice).toLocaleString('en-IN')}</span>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="text-center py-4 text-sm text-gray-400">No matches</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Custom charge form — laundry, spa, transport, telephone, misc, or a
+// food item not on the menu. Adds one line to the shared cart below;
+// doesn't submit on its own.
+function CustomChargeForm({ onAdd }: { onAdd: (line: Omit<CartLine, 'key'>) => void }) {
   const [form, setForm] = useState({
-    chargeType:  'food',
+    chargeType:  'laundry',
     description: '',
     qty:         '1',
     rate:        '',
     gstRate:     '5',
-    date:        new Date().toISOString().split('T')[0],
   })
+  const f = (k: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm({ ...form, [k]: e.target.value })
 
-  const addCharge = useMutation({
-    mutationFn: (data: any) => hotelApi.addCharge(bookingId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hotel-booking', bookingId] })
-      toast.success('Charge added to folio')
-      onClose()
-    },
-    onError: (err: any) => toast.error(err?.response?.data?.error ?? 'Failed to add charge'),
-  })
-
-  const amount = (Number(form.qty) * Number(form.rate)).toFixed(2)
-
-  function handleSubmit() {
+  function handleAdd() {
     if (!form.description || !form.rate) { toast.error('Fill description and rate'); return }
-    addCharge.mutate({
+    onAdd({
       chargeType:  form.chargeType,
       description: form.description,
       qty:         Number(form.qty),
       rate:        Number(form.rate),
       gstRate:     Number(form.gstRate),
-      date:        form.date,
     })
+    setForm({ ...form, description: '', rate: '' })
   }
 
-  const f = (k: keyof typeof form) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm({ ...form, [k]: e.target.value })
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="label">Charge Type</label>
+        <select className="input capitalize" value={form.chargeType} onChange={f('chargeType')}>
+          {CHARGE_TYPES.filter((t) => t !== 'room' && t !== 'food').map(t => <option key={t} value={t} className="capitalize">{t}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="label">Description</label>
+        <input className="input" value={form.description} onChange={f('description')} placeholder="Description" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">Qty</label>
+          <input className="input" type="number" min="0" step="0.5" value={form.qty} onChange={f('qty')} />
+        </div>
+        <div>
+          <label className="label">Rate (₹)</label>
+          <input className="input" type="number" min="0" value={form.rate} onChange={f('rate')} />
+        </div>
+      </div>
+      <div>
+        <label className="label">GST %</label>
+        <select className="input" value={form.gstRate} onChange={f('gstRate')}>
+          {[0,5,12,18,28].map(r => <option key={r} value={r}>{r}%</option>)}
+        </select>
+      </div>
+      <button type="button" onClick={handleAdd} className="btn-ghost w-full justify-center">
+        <Plus className="w-4 h-4" /> Add to order
+      </button>
+    </div>
+  )
+}
+
+function AddChargeModal({ bookingId, onClose }: { bookingId: string; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [mode, setMode] = useState<'food' | 'service' | 'other'>('food')
+  const [cart, setCart] = useState<CartLine[]>([])
+
+  const addBulkCharges = useMutation({
+    mutationFn: (items: any[]) => hotelApi.addChargesBulk(bookingId, { items }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hotel-booking', bookingId] })
+      toast.success(`${cart.length} item${cart.length !== 1 ? 's' : ''} added to folio`)
+      onClose()
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error ?? 'Failed to add charges'),
+  })
+
+  function addMenuItem(p: any, chargeType: string) {
+    setCart((c) => {
+      const existing = c.find((l) => l.productId === p.id)
+      if (existing) return c.map((l) => l.productId === p.id ? { ...l, qty: l.qty + 1 } : l)
+      return [...c, {
+        key: p.id, chargeType, description: p.name, productId: p.id,
+        rate: Number(p.salePrice), gstRate: Number(p.gstRate ?? 0), qty: 1,
+      }]
+    })
+  }
+  function addCustomLine(line: Omit<CartLine, 'key'>) {
+    setCart((c) => [...c, { ...line, key: `custom-${Date.now()}-${Math.random()}` }])
+  }
+  function setQty(key: string, qty: number) {
+    if (qty <= 0) { setCart((c) => c.filter((l) => l.key !== key)); return }
+    setCart((c) => c.map((l) => l.key === key ? { ...l, qty } : l))
+  }
+  function removeLine(key: string) {
+    setCart((c) => c.filter((l) => l.key !== key))
+  }
+
+  const total = cart.reduce((sum, l) => sum + l.qty * l.rate, 0)
+
+  function handleSubmit() {
+    if (cart.length === 0) { toast.error('Add at least one item'); return }
+    addBulkCharges.mutate(cart.map((l) => ({
+      chargeType:  l.chargeType,
+      description: l.description,
+      productId:   l.productId,
+      qty:         l.qty,
+      rate:        l.rate,
+      gstRate:     l.gstRate,
+    })))
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-sm">
-        <div className="p-5 border-b border-gray-100">
-          <h3 className="text-base font-semibold text-gray-900">Add Folio Charge</h3>
-        </div>
-        <div className="p-5 space-y-3">
-          <div>
-            <label className="label">Charge Type</label>
-            <select className="input capitalize" value={form.chargeType} onChange={f('chargeType')}>
-              {CHARGE_TYPES.map(t => <option key={t} value={t} className="capitalize">{t}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Description</label>
-            <input className="input" value={form.description} onChange={f('description')}
-              placeholder={form.chargeType === 'food' ? 'e.g. Dinner for 2' : 'Description'} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Qty</label>
-              <input className="input" type="number" min="0" step="0.5" value={form.qty} onChange={f('qty')} />
-            </div>
-            <div>
-              <label className="label">Rate (₹)</label>
-              <input className="input" type="number" min="0" value={form.rate} onChange={f('rate')} />
-            </div>
-            <div>
-              <label className="label">GST %</label>
-              <select className="input" value={form.gstRate} onChange={f('gstRate')}>
-                {[0,5,12,18,28].map(r => <option key={r} value={r}>{r}%</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Date</label>
-              <input className="input" type="date" value={form.date} onChange={f('date')} />
+      <div className="bg-white rounded-xl w-full max-w-sm max-h-[90vh] flex flex-col">
+        {/* Everything above the footer scrolls as one unit, so on short
+            screens the buttons stay pinned at the bottom instead of being
+            pushed off-screen by a long menu + a growing cart. */}
+        <div className="overflow-y-auto">
+          <div className="p-5 pb-3 border-b border-gray-100">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Add Folio Charges</h3>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setMode('food')}
+                className={`flex-1 text-sm font-medium py-1.5 rounded-lg ${mode === 'food' ? 'bg-primary-50 text-primary-700' : 'text-gray-500'}`}
+              >
+                Food Order
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('service')}
+                className={`flex-1 text-sm font-medium py-1.5 rounded-lg ${mode === 'service' ? 'bg-primary-50 text-primary-700' : 'text-gray-500'}`}
+              >
+                Services
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('other')}
+                className={`flex-1 text-sm font-medium py-1.5 rounded-lg ${mode === 'other' ? 'bg-primary-50 text-primary-700' : 'text-gray-500'}`}
+              >
+                Other Charge
+              </button>
             </div>
           </div>
-          {form.rate && (
-            <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
-              Amount: <strong>₹{Number(amount).toLocaleString('en-IN')}</strong>
-              {Number(form.gstRate) > 0 && (
-                <span className="text-gray-400 ml-2">
-                  + ₹{(Number(amount) * Number(form.gstRate) / 100).toFixed(2)} GST
-                </span>
-              )}
+
+          {/* Picker — changes with the tab */}
+          <div className="p-5 pb-3">
+            {mode === 'food' && (
+              <CategoryMenuPicker
+                categoryMatch={/food|beverage/i}
+                emptyIcon={ChefHat}
+                emptyLabel="No menu items yet."
+                emptyHint="Add dishes from Products → Food & Beverage category, then they'll show up here."
+                searchPlaceholder="Search menu…"
+                onAdd={(p) => addMenuItem(p, 'food')}
+              />
+            )}
+            {mode === 'service' && (
+              <CategoryMenuPicker
+                categoryMatch={/service/i}
+                emptyIcon={Sparkles}
+                emptyLabel="No services set up yet."
+                emptyHint="Add them from Products → Services category, then they'll show up here."
+                searchPlaceholder="Search services…"
+                onAdd={(p) => addMenuItem(p, 'service')}
+              />
+            )}
+            {mode === 'other' && <CustomChargeForm onAdd={addCustomLine} />}
+          </div>
+
+          {/* Cart — mixes food items and other charges from either tab in one running order. */}
+          {cart.length > 0 && (
+            <div className="px-5 pb-3 border-t border-gray-100 pt-3">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Order ({cart.length})
+              </div>
+              <div className="space-y-2">
+                {cart.map((l) => (
+                  <div key={l.key} className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-gray-800 truncate">{l.description}</div>
+                      <div className="text-xs text-gray-400 capitalize">{l.chargeType}</div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button type="button" onClick={() => setQty(l.key, l.qty - 1)} className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 text-gray-600 hover:bg-gray-200">
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="text-sm w-5 text-center">{l.qty}</span>
+                      <button type="button" onClick={() => setQty(l.key, l.qty + 1)} className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 text-gray-600 hover:bg-gray-200">
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <span className="text-sm text-gray-500 w-16 text-right shrink-0">₹{(l.qty * l.rate).toLocaleString('en-IN')}</span>
+                    <button type="button" onClick={() => removeLine(l.key)} className="text-gray-300 hover:text-red-500 shrink-0">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between pt-2 mt-2 border-t border-gray-100 text-sm font-semibold text-gray-900">
+                <span>Total</span>
+                <span>₹{total.toLocaleString('en-IN')}</span>
+              </div>
             </div>
           )}
         </div>
-        <div className="flex gap-2 p-5 border-t border-gray-100">
+
+        <div className="flex gap-2 p-5 border-t border-gray-100 shrink-0">
           <button type="button" onClick={onClose} className="btn-ghost flex-1 justify-center">Cancel</button>
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={addCharge.isPending}
+            disabled={addBulkCharges.isPending || cart.length === 0}
             className="btn-primary flex-1 justify-center"
           >
-            {addCharge.isPending ? 'Adding…' : 'Add Charge'}
+            {addBulkCharges.isPending ? 'Adding…' : `Add ${cart.length || ''} to Folio`}
           </button>
         </div>
       </div>
@@ -133,9 +356,31 @@ function CheckInModal({ booking, onClose }: { booking: any; onClose: () => void 
   const [idType, setIdType]     = useState(booking.idType ?? 'aadhar')
   const [idNumber, setIdNumber] = useState(booking.idNumber ?? '')
   const [formC, setFormC]       = useState(booking.formCFiled ?? false)
+  const [idImages, setIdImages] = useState<string[]>(booking.idImages ?? [])
+  const [uploading, setUploading] = useState(false)
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) { toast.error('Please choose an image file'); return }
+    if (idImages.length >= 4) { toast.error('Maximum 4 photos per guest'); return }
+    setUploading(true)
+    try {
+      const dataUrl = await fileToDataUrl(file)
+      if (dataUrl.length > MAX_ID_UPLOAD_BYTES) {
+        toast.error('Photo is too large — please use a smaller file (roughly under 500KB)')
+        return
+      }
+      setIdImages((s) => [...s, dataUrl])
+    } finally {
+      setUploading(false)
+    }
+  }
+  function removeImage(i: number) { setIdImages((s) => s.filter((_, idx) => idx !== i)) }
 
   const checkIn = useMutation({
-    mutationFn: () => hotelApi.checkIn(booking.id, { idType, idNumber, formCFiled: formC }),
+    mutationFn: () => hotelApi.checkIn(booking.id, { idType, idNumber, formCFiled: formC, idImages }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hotel-booking', booking.id] })
       queryClient.invalidateQueries({ queryKey: ['hotel-dashboard'] })
@@ -166,6 +411,31 @@ function CheckInModal({ booking, onClose }: { booking: any; onClose: () => void 
           <div>
             <label className="label">ID Number</label>
             <input className="input" value={idNumber} onChange={e => setIdNumber(e.target.value)} placeholder="XXXX XXXX XXXX" />
+          </div>
+          <div>
+            <label className="label">ID Photo (front / back)</label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {idImages.map((img, i) => (
+                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 group">
+                  <img src={img} alt={`ID photo ${i + 1}`} className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                    title="Remove"
+                  >
+                    <Trash2 className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              ))}
+              {idImages.length < 4 && (
+                <label className="w-16 h-16 rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:border-primary-400 hover:text-primary-500 cursor-pointer transition-colors">
+                  <Upload className="w-4 h-4" />
+                  <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
+                </label>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">Kept with this booking only — required for police/local verification records, not shown anywhere public.</p>
           </div>
           {booking.nationality !== 'Indian' && (
             <label className="flex items-center gap-2 cursor-pointer">
@@ -271,6 +541,14 @@ export function BookingDetailPage() {
     enabled: !!id,
   })
 
+  // Repeat-guest lookup — excludes this booking itself so a checked-out
+  // guest doesn't show up as "returning" on their own stay's page.
+  const { data: guestHistory } = useQuery({
+    queryKey: ['guest-history', booking?.guestPhone, id],
+    queryFn:  () => hotelApi.guestHistory(booking!.guestPhone, id),
+    enabled:  !!booking?.guestPhone,
+  })
+
   const removeCharge = useMutation({
     mutationFn: (chargeId: string) => hotelApi.removeCharge(id!, chargeId),
     onSuccess: () => {
@@ -345,6 +623,12 @@ export function BookingDetailPage() {
                   <Phone className="w-4 h-4 text-gray-400" />{booking.guestPhone}
                 </div>
               )}
+              {guestHistory?.isReturning && (
+                <p className="text-xs text-primary-600 font-medium">
+                  ⭐ Returning guest — {guestHistory.stayCount} previous stay{guestHistory.stayCount > 1 ? 's' : ''}
+                  {guestHistory.lastStay && ` · last stayed ${new Date(guestHistory.lastStay).toLocaleDateString('en-IN')}`}
+                </p>
+              )}
               {booking.guestEmail && (
                 <div className="flex items-center gap-2 text-gray-600">
                   <Mail className="w-4 h-4 text-gray-400" />{booking.guestEmail}
@@ -357,6 +641,18 @@ export function BookingDetailPage() {
                 <div className="flex items-center gap-2 text-gray-600">
                   <CreditCard className="w-4 h-4 text-gray-400" />
                   <span className="capitalize">{booking.idType.replace('_', ' ')}</span>: {booking.idNumber}
+                </div>
+              )}
+              {booking.idImages?.length > 0 && (
+                <div className="flex items-center gap-2 pt-1">
+                  <CreditCard className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div className="flex gap-1.5">
+                    {booking.idImages.map((img: string, i: number) => (
+                      <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded border border-gray-200 overflow-hidden block">
+                        <img src={img} alt={`ID photo ${i + 1}`} className="w-full h-full object-cover" />
+                      </a>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

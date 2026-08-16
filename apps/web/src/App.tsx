@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/auth.store'
 import { AppLayout } from './components/layout/AppLayout'
 import { LoginPage } from './pages/LoginPage'
-import { RegisterPage } from './pages/RegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { InvoiceListPage } from './pages/InvoiceListPage'
 import { CreateInvoicePage } from './pages/CreateInvoicePage'
@@ -21,6 +20,7 @@ import { StockAdjustmentPage } from './pages/inventory/StockAdjustmentPage'
 import { StockTransfersPage } from './pages/inventory/StockTransfersPage'
 import { ExpensePage } from './pages/ExpensePage'
 import { BranchesPage } from './pages/BranchesPage'
+import { WebsitePage } from './pages/WebsitePage'
 import { ReportsPage } from './pages/ReportsPage'
 import { StaffPage } from './pages/StaffPage'
 import { DeliveriesPage } from './pages/DeliveriesPage'
@@ -43,22 +43,6 @@ import { BroadcastPage }        from './pages/BroadcastPage'
 import { DiscountRulesPage }         from './pages/DiscountRulesPage'
 import { POSSettingsPage }           from './pages/POSSettingsPage'
 import { CustomerDisplayPage }       from './pages/CustomerDisplayPage'
-import { PatientListPage }           from './pages/clinic/PatientListPage'
-import { PatientDetailPage }         from './pages/clinic/PatientDetailPage'
-import { StudentProgressPage }       from './pages/coaching/StudentProgressPage'
-import { StudentProgressDetailPage } from './pages/coaching/StudentProgressDetailPage'
-import { ExamsPage }                 from './pages/coaching/ExamsPage'
-import { MonthlyPlansPage }          from './pages/coaching/MonthlyPlansPage'
-import { PlanDetailPage }            from './pages/coaching/PlanDetailPage'
-import { StudentReportPage }         from './pages/coaching/StudentReportPage'
-import { NotesLibraryPage }          from './pages/coaching/NotesLibraryPage'
-import { RoboticsPage }              from './pages/coaching/RoboticsPage'
-import { RoboticsProjectPage }       from './pages/coaching/RoboticsProjectPage'
-import { RestaurantLayout }    from './pages/restaurant/RestaurantLayout'
-import { FloorPlanPage }       from './pages/restaurant/FloorPlanPage'
-import { KitchenDisplayPage }  from './pages/restaurant/KitchenDisplayPage'
-import { ShiftReportPage }     from './pages/restaurant/ShiftReportPage'
-import { SetupTablesPage }     from './pages/restaurant/SetupTablesPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn())
@@ -71,7 +55,6 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
 
         <Route
           element={
@@ -98,10 +81,12 @@ export default function App() {
             <Route path="purchase-orders/:id"  element={<PurchaseOrderDetailPage />} />
             <Route path="adjustments"    element={<StockAdjustmentPage />} />
             <Route path="transfers"      element={<StockTransfersPage />} />
+            <Route path="grn"            element={<GRNPage />} />
           </Route>
 
           <Route path="/expenses" element={<ExpensePage />} />
           <Route path="/branches" element={<BranchesPage />} />
+          <Route path="/website" element={<WebsitePage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/staff" element={<StaffPage />} />
           <Route path="/deliveries" element={<DeliveriesPage />} />
@@ -110,7 +95,6 @@ export default function App() {
           <Route path="/approvals" element={<ApprovalsPage />} />
           <Route path="/contracts" element={<ContractsPage />} />
           <Route path="/advances" element={<AdvancesPage />} />
-          <Route path="/inventory/grn" element={<GRNPage />} />
           <Route path="/aging" element={<AgingPage />} />
 
           {/* ── Hotel section ── */}
@@ -125,28 +109,9 @@ export default function App() {
             <Route path="night-audit"    element={<NightAuditPage />} />
           </Route>
 
-          {/* ── Restaurant section ── */}
-          <Route path="/restaurant" element={<RestaurantLayout />}>
-            <Route index            element={<FloorPlanPage />} />
-            <Route path="kitchen"   element={<KitchenDisplayPage />} />
-            <Route path="shift"     element={<ShiftReportPage />} />
-            <Route path="setup"     element={<SetupTablesPage />} />
-          </Route>
-
           <Route path="/broadcast" element={<BroadcastPage />} />
           <Route path="/discount-rules" element={<DiscountRulesPage />} />
           <Route path="/pos-settings" element={<POSSettingsPage />} />
-          <Route path="/clinic/patients" element={<PatientListPage />} />
-          <Route path="/clinic/patients/:partyId" element={<PatientDetailPage />} />
-          <Route path="/coaching/progress" element={<StudentProgressPage />} />
-          <Route path="/coaching/progress/:partyId" element={<StudentProgressDetailPage />} />
-          <Route path="/coaching/exams" element={<ExamsPage />} />
-          <Route path="/coaching/plans" element={<MonthlyPlansPage />} />
-          <Route path="/coaching/plans/:planId" element={<PlanDetailPage />} />
-          <Route path="/coaching/report/:partyId" element={<StudentReportPage />} />
-          <Route path="/coaching/notes" element={<NotesLibraryPage />} />
-          <Route path="/coaching/robotics" element={<RoboticsPage />} />
-          <Route path="/coaching/robotics/:projectId" element={<RoboticsProjectPage />} />
 
           {/* Legacy /products redirect */}
           <Route path="/products" element={<Navigate to="/inventory/products" replace />} />

@@ -1,24 +1,33 @@
 # =============================================================================
 # Full local stack — infra + API + web
+# Isolated from billingPlatform's stack: distinct container names, volumes,
+# DB name, and host ports so `docker compose up` here never touches
+# billingPlatform's data.
 # Start all:   docker compose up -d --build
 # API only:    docker compose up -d postgres redis
 # Wipe data:   docker compose down -v
 # =============================================================================
+
+# Explicit project name — both this repo and billingPlatform have a folder
+# literally named `docker`, so Compose's default project name (derived from
+# the folder name) collides between the two repos and one `docker compose up`
+# can silently recreate/replace the other's containers. Do not remove this.
+name: hotelplatform
 
 services:
 
   # ── PostgreSQL 16 ───────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: billing_postgres
+    container_name: hotel_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: billing_db
-      POSTGRES_USER: billing_app
+      POSTGRES_DB: hotel_db
+      POSTGRES_USER: hotel_app
       POSTGRES_PASSWORD: localdev123
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/01_init.sql
@@ -36,7 +45,7 @@ services:
         -c log_connections=on
         -c log_lock_waits=on
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U billing_app -d billing_db"]
+      test: ["CMD-SHELL", "pg_isready -U hotel_app -d hotel_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -44,10 +53,10 @@ services:
   # ── Redis 7 ─────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: billing_redis
+    container_name: hotel_redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     command: >
@@ -63,12 +72,12 @@ services:
       retries: 5
 
   # ── pgAdmin 4 ────────────────────────────────────────────────────────────────
-  # Visual DB browser — open http://localhost:5050
+  # Visual DB browser — open http://localhost:5051
   # Login: dev@local.com / admin
-  # Add server: host=postgres, port=5432, user=billing_app, pass=localdev123
+  # Add server: host=postgres, port=5432, user=hotel_app, pass=localdev123
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: billing_pgadmin
+    container_name: hotel_pgadmin
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: dev@local.com
@@ -76,7 +85,7 @@ services:
       PGADMIN_CONFIG_SERVER_MODE: "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     ports:
-      - "5050:80"
+      - "5051:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
       - ./pgadmin-servers.json:/pgadmin4/servers.json
@@ -85,23 +94,23 @@ services:
         condition: service_healthy
 
   # ── Redis Commander ──────────────────────────────────────────────────────────
-  # Visual Redis browser — open http://localhost:8081
+  # Visual Redis browser — open http://localhost:8082
   redis-commander:
     image: rediscommander/redis-commander:latest
-    container_name: billing_redis_ui
+    container_name: hotel_redis_ui
     restart: unless-stopped
     environment:
       REDIS_HOSTS: local:redis:6379
     ports:
-      - "8081:8081"
+      - "8082:8081"
     depends_on:
       redis:
         condition: service_healthy
 
 volumes:
   postgres_data:
-    name: billing_postgres_data
+    name: hotel_postgres_data
   redis_data:
-    name: billing_redis_data
+    name: hotel_redis_data
   pgadmin_data:
-    name: billing_pgadmin_data
+    name: hotel_pgadmin_data

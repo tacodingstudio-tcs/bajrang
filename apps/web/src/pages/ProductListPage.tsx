@@ -1,9 +1,9 @@
 // src/pages/ProductListPage.tsx
 import { useState, useRef, useCallback } from 'react'
 import * as XLSX from 'xlsx'
-import { useProducts, useCreateProduct, useUpdateProduct, useSuggestHSN, useConfirmHSN } from '@/hooks/useApi'
+import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useSuggestHSN, useConfirmHSN } from '@/hooks/useApi'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { Plus, Search, Package, Sparkles, Check, X, Camera, Pencil, Upload, Printer, LayoutGrid, List } from 'lucide-react'
+import { Plus, Search, Package, Sparkles, Check, X, Camera, Pencil, Upload, Printer, LayoutGrid, List, Trash2, AlertTriangle } from 'lucide-react'
 import { productApi, categoryApi, brandApi } from '@/lib/api'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/auth.store'
@@ -168,6 +168,8 @@ export function ProductListPage() {
   const [showAddModal, setShowAddModal]       = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [editProduct, setEditProduct]         = useState<any | null>(null)
+  const [deleteProduct, setDeleteProduct]     = useState<any | null>(null)
+  const deleteMutation = useDeleteProduct()
   const [viewMode, setViewMode]               = useViewMode()
 
   const branch = useAuthStore((s) => s.branch)
@@ -322,7 +324,7 @@ export function ProductListPage() {
         {viewMode === 'grid' ? (
           <div className="grid grid-cols-4 gap-4">
             {data?.data?.map((product: any) => (
-              <ProductCard key={product.id} product={product} onEdit={() => setEditProduct(product)} />
+              <ProductCard key={product.id} product={product} onEdit={() => setEditProduct(product)} onDelete={() => setDeleteProduct(product)} />
             ))}
           </div>
         ) : (
@@ -340,7 +342,7 @@ export function ProductListPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {data?.data?.map((product: any) => (
-                  <ProductRow key={product.id} product={product} onEdit={() => setEditProduct(product)} />
+                  <ProductRow key={product.id} product={product} onEdit={() => setEditProduct(product)} onDelete={() => setDeleteProduct(product)} />
                 ))}
               </tbody>
             </table>
@@ -372,12 +374,43 @@ export function ProductListPage() {
           domainType={domainType}
         />
       )}
+
+      {deleteProduct && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-4 h-4 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Remove "{deleteProduct.name}"?</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  If it's been used in any invoice, it'll be hidden instead of deleted, so past records stay intact.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setDeleteProduct(null)} className="btn-ghost" disabled={deleteMutation.isPending}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(deleteProduct.id, { onSuccess: () => setDeleteProduct(null) })}
+                disabled={deleteMutation.isPending}
+                className="btn-danger"
+              >
+                {deleteMutation.isPending ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Product Card with inline HSN suggest ─────────────────────────────────────
-function ProductCard({ product, onEdit }: { product: any; onEdit: () => void }) {
+function ProductCard({ product, onEdit, onDelete }: { product: any; onEdit: () => void; onDelete: () => void }) {
   const [hsnSuggestion, setHsnSuggestion] = useState<any>(null)
   const [imgKey, setImgKey]   = useState(0)
   const fileRef               = useRef<HTMLInputElement>(null)
@@ -504,6 +537,14 @@ function ProductCard({ product, onEdit }: { product: any; onEdit: () => void }) 
           >
             <Pencil className="w-3.5 h-3.5" />
           </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+            title="Remove product"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>
@@ -511,7 +552,7 @@ function ProductCard({ product, onEdit }: { product: any; onEdit: () => void }) 
 }
 
 // ── Product Row (list view) ───────────────────────────────────────────────────
-function ProductRow({ product, onEdit }: { product: any; onEdit: () => void }) {
+function ProductRow({ product, onEdit, onDelete }: { product: any; onEdit: () => void; onDelete: () => void }) {
   return (
     <tr className="hover:bg-gray-50 transition-colors">
       <td className="px-4 py-3">
@@ -559,6 +600,15 @@ function ProductRow({ product, onEdit }: { product: any; onEdit: () => void }) {
             aria-label="Edit product"
           >
             <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+            title="Remove product"
+            aria-label="Remove product"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </td>

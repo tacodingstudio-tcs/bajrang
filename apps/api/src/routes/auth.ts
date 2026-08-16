@@ -133,7 +133,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       accessToken,
       refreshToken,
       accessTokenExpiresIn: 15 * 60,
-      user:   { id: user.id, name: user.name, phone: user.phone, role: user.role, lang: user.lang },
+      user:   { id: user.id, name: user.name, phone: user.phone, role: user.role, lang: user.lang, aiEnabled: user.aiEnabled },
       tenant: { id: tenant.id, name: tenant.name, plan: tenant.plan, schemaName: tenant.schemaName },
       branch: {
         id: branch?.id, name: branch?.name,

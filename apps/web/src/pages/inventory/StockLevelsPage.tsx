@@ -1,6 +1,7 @@
 // src/pages/inventory/StockLevelsPage.tsx
 import { useState, useMemo } from 'react'
 import { useStockLevels, useStockLedger, useReorderSuggestions, useCreatePurchaseOrder, useExpiryAlerts, useCreateStockAdjustment, usePostStockAdjustment } from '@/hooks/useApi'
+import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Search, AlertTriangle, X, TrendingUp, TrendingDown, ShoppingCart, CalendarClock, Pencil } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -188,7 +189,9 @@ function ExpiryAlertsPanel() {
 }
 
 function ReorderPanel() {
-  const { data, isLoading } = useReorderSuggestions()
+  // AI reorder suggestions — cashier is blocked from /api/ai/* server-side.
+  const canUseAI = useAuthStore((s) => s.user?.role !== 'cashier')
+  const { data, isLoading } = useReorderSuggestions({ enabled: canUseAI })
   const createPO = useCreatePurchaseOrder()
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -477,7 +480,8 @@ export function StockLevelsPage() {
     limit:   100,
   })
 
-  const { data: reorderData } = useReorderSuggestions()
+  const canUseAI = useAuthStore((s) => s.user?.role !== 'cashier')
+  const { data: reorderData } = useReorderSuggestions({ enabled: canUseAI })
   const { data: expiryData }  = useExpiryAlerts(30)
 
   const allRows          = data?.data ?? []

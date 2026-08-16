@@ -18,12 +18,19 @@ const STATUS_BADGE: Record<string, string> = {
 const BOOKING_SOURCES: Record<string, string> = {
   walk_in:         'Walk-in',
   phone:           'Phone',
+  website:         'Website',
   ota_makemytrip:  'MakeMyTrip',
   ota_goibibo:     'Goibibo',
   ota_booking:     'Booking.com',
   ota_agoda:       'Agoda',
   corporate:       'Corporate',
   direct_web:      'Direct/Web',
+}
+
+// A website inquiry that's still `reserved` hasn't been called/confirmed by
+// staff yet — surface it distinctly so it doesn't blend into normal bookings.
+function isPendingWebsiteInquiry(bk: { bookingSource: string; status: string }) {
+  return bk.bookingSource === 'website' && bk.status === 'reserved'
 }
 
 const MEAL_PLANS = [
@@ -57,6 +64,14 @@ function NewBookingModal({ onClose }: { onClose: () => void }) {
   const { data: rooms = [] } = useQuery({
     queryKey: ['hotel-rooms'],
     queryFn: () => hotelApi.listRooms({ status: 'available' }),
+  })
+
+  // Repeat-guest lookup — lets front desk see "returning guest" while
+  // typing the phone number, before the booking is even created.
+  const { data: guestHistory } = useQuery({
+    queryKey: ['guest-history', form.guestPhone],
+    queryFn:  () => hotelApi.guestHistory(form.guestPhone),
+    enabled:  form.guestPhone.replace(/\D/g, '').length >= 10,
   })
 
   const createBooking = useMutation({
@@ -111,6 +126,12 @@ function NewBookingModal({ onClose }: { onClose: () => void }) {
             <div>
               <label className="label">Phone</label>
               <input className="input" value={form.guestPhone} onChange={f('guestPhone')} placeholder="+91 9876543210" />
+              {guestHistory?.isReturning && (
+                <p className="text-xs text-primary-600 font-medium mt-1">
+                  ⭐ Returning guest — {guestHistory.stayCount} previous stay{guestHistory.stayCount > 1 ? 's' : ''}
+                  {guestHistory.lastStay && ` · last stayed ${new Date(guestHistory.lastStay).toLocaleDateString('en-IN')}`}
+                </p>
+              )}
             </div>
             <div>
               <label className="label">Email</label>
@@ -232,14 +253,25 @@ export function BookingsPage() {
   const navigate = useNavigate()
   const [search, setSearch]         = useState('')
   const [statusFilter, setStatus]   = useState('reserved,checked_in')
+  const [sourceFilter, setSource]   = useState('')
   const [showNew, setShowNew]       = useState(false)
   const [page, setPage]             = useState(1)
 
+  // Lightweight count for the "New Inquiries" badge — unconfirmed website
+  // bookings staff haven't acted on yet.
+  const { data: inquiryData } = useQuery({
+    queryKey: ['hotel-bookings-inquiry-count'],
+    queryFn: () => hotelApi.listBookings({ status: 'reserved', bookingSource: 'website', limit: 1 }),
+    refetchInterval: 30000,
+  })
+  const inquiryCount = inquiryData?.total ?? 0
+
   const { data, isLoading } = useQuery({
-    queryKey: ['hotel-bookings', search, statusFilter, page],
+    queryKey: ['hotel-bookings', search, statusFilter, sourceFilter, page],
     queryFn: () => hotelApi.listBookings({
-      search:  search || undefined,
-      status:  statusFilter || undefined,
+      search:        search || undefined,
+      status:        statusFilter || undefined,
+      bookingSource: sourceFilter || undefined,
       page,
       limit:   20,
     }),
@@ -249,15 +281,37 @@ export function BookingsPage() {
   const total     = data?.total ?? 0
   const totalPages = Math.ceil(total / 20)
 
+  function selectInquiries() {
+    setStatus('reserved')
+    setSource('website')
+    setPage(1)
+  }
+
+  const viewingInquiries = statusFilter === 'reserved' && sourceFilter === 'website'
+
   return (
     <div>
       <PageHeader
         title="Bookings"
         subtitle={`${total} bookings`}
         action={
-          <button type="button" onClick={() => setShowNew(true)} className="btn-primary">
-            <Plus className="w-4 h-4" /> New Booking
-          </button>
+          <div className="flex items-center gap-2">
+            {inquiryCount > 0 && (
+              <button
+                type="button"
+                onClick={selectInquiries}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                  viewingInquiries ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                {inquiryCount} New {inquiryCount === 1 ? 'Inquiry' : 'Inquiries'}
+              </button>
+            )}
+            <button type="button" onClick={() => setShowNew(true)} className="btn-primary">
+              <Plus className="w-4 h-4" /> New Booking
+            </button>
+          </div>
         }
       />
 
@@ -284,9 +338,9 @@ export function BookingsPage() {
               <button
                 key={value}
                 type="button"
-                onClick={() => { setStatus(value); setPage(1) }}
+                onClick={() => { setStatus(value); setSource(''); setPage(1) }}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                  statusFilter === value
+                  statusFilter === value && !sourceFilter
                     ? 'bg-primary-600 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
@@ -321,12 +375,21 @@ export function BookingsPage() {
                 {bookings.map((bk: any) => (
                   <tr
                     key={bk.id}
-                    className="hover:bg-gray-50 cursor-pointer transition-colors"
+                    className={`cursor-pointer transition-colors ${
+                      isPendingWebsiteInquiry(bk) ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'
+                    }`}
                     onClick={() => navigate(`/hotel/bookings/${bk.id}`)}
                   >
                     <td className="px-4 py-3 font-mono text-xs text-gray-500">{bk.folioNo}</td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{bk.guestName}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium text-gray-900">{bk.guestName}</div>
+                        {isPendingWebsiteInquiry(bk) && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                            New Inquiry
+                          </span>
+                        )}
+                      </div>
                       {bk.guestPhone && <div className="text-xs text-gray-400">{bk.guestPhone}</div>}
                     </td>
                     <td className="px-4 py-3 text-gray-700">{bk.roomNo}</td>

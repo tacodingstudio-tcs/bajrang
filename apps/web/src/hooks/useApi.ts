@@ -9,6 +9,7 @@ import {
   supplierApi, purchaseOrderApi, grnApi, stockAdjustmentApi, stockTransferApi, stockSummaryApi,
   expenseApi, branchApi, analyticsApi, reportsApi, staffApi, deliveryApi, usersApi, galleryApi,
   contractApi, advanceApi, approvalApi, discountRulesApi, coachingApi, clinicApi, roboticsApi,
+  websiteApi, featuresApi,
 } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 
@@ -252,6 +253,19 @@ export function useUpdateProduct() {
   })
 }
 
+export function useDeleteProduct() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => productApi.delete(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['products'] })
+      qc.invalidateQueries({ queryKey: ['stock'] })
+      toast.success('Product removed')
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error ?? 'Failed to remove product'),
+  })
+}
+
 export function useStockAdjust() {
   const qc = useQueryClient()
   return useMutation({
@@ -319,23 +333,24 @@ export function useStock() {
 
 // ── AI hooks ──────────────────────────────────────────────────────────────────
 
-export function useAIInsight() {
+export function useAIInsight(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['ai-insight'],
     queryFn:  aiApi.insight,
     staleTime: 5 * 60 * 1000, // refresh every 5 min
     retry: false,
+    enabled: options?.enabled ?? true,
   })
 }
 
-export function useReorderSuggestions() {
+export function useReorderSuggestions(options?: { enabled?: boolean }) {
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn())
   return useQuery({
     queryKey: ['ai-reorder'],
     queryFn:  aiApi.reorder,
     staleTime: 10 * 60 * 1000,
     retry: false,
-    enabled: isLoggedIn,
+    enabled: isLoggedIn && (options?.enabled ?? true),
   })
 }
 
@@ -630,6 +645,42 @@ export function useActivateBranch() {
   })
 }
 
+// ── Feature toggle hooks ────────────────────────────────────────────────────────
+
+export function useFeatures(options?: { enabled?: boolean }) {
+  return useQuery({ queryKey: ['features'], queryFn: featuresApi.get, enabled: options?.enabled ?? true })
+}
+
+export function useUpdateFeatures() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { contractsEnabled?: boolean; deliveriesEnabled?: boolean }) => featuresApi.update(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['features'] })
+      toast.success('Settings updated')
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error ?? 'Failed to update settings'),
+  })
+}
+
+// ── Website content hooks ──────────────────────────────────────────────────────
+
+export function useWebsiteContent() {
+  return useQuery({ queryKey: ['website-content'], queryFn: websiteApi.get })
+}
+
+export function useUpdateWebsiteSection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ section, data }: { section: string; data: unknown }) =>
+      websiteApi.updateSection(section, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['website-content'] })
+      toast.success('Website updated')
+    },
+  })
+}
+
 // ── Expense hooks ─────────────────────────────────────────────────────────────
 
 export function useExpenses(params?: Record<string, unknown>) {
@@ -745,6 +796,14 @@ export function useReportsPlStatement(params?: { from?: string; to?: string }) {
   })
 }
 
+export function useHotelOccupancy(params: { from: string; to: string }) {
+  return useQuery({
+    queryKey: ['reports', 'hotel-occupancy', params],
+    queryFn:  () => reportsApi.hotelOccupancy(params),
+    enabled:  !!params.from && !!params.to,
+  })
+}
+
 export function useReportsCashRegister(params?: { date?: string }) {
   return useQuery({
     queryKey: QK.reportsCashRegister(params),
@@ -803,11 +862,12 @@ export function useReportsBankReconSave() {
   })
 }
 
-export function useMonthlyComparison() {
+export function useMonthlyComparison(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: QK.reportsMonthly(),
     queryFn:  () => reportsApi.monthlyComparison(),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -983,6 +1043,19 @@ export function useUpdateUser() {
       toast.success('User updated')
     },
     onError: (err: any) => toast.error(err?.response?.data?.error ?? 'Failed to update user'),
+  })
+}
+
+export function useSetAiAccess() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, aiEnabled }: { id: string; aiEnabled: boolean }) =>
+      usersApi.setAiAccess(id, aiEnabled),
+    onSuccess: (_data, { aiEnabled }) => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+      toast.success(aiEnabled ? 'AI Assistant access granted' : 'AI Assistant access revoked')
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error ?? 'Failed to update AI access'),
   })
 }
 

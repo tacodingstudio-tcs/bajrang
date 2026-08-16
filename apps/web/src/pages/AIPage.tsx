@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { aiApi, invoiceApi, productApi } from '@/lib/api'
+import { aiApi } from '@/lib/api'
+import { useUsers, useSetAiAccess } from '@/hooks/useApi'
+import { useAuthStore } from '@/store/auth.store'
 import {
   Sparkles, Send, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle,
-  Camera, Search, Copy, MessageCircle, Tag, TrendingUp, Users, ShieldAlert,
-  FileText, Package, Bot, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight,
-  Plus, ShoppingCart,
+  Search, Copy, MessageCircle, Tag, TrendingUp, Users, ShieldAlert,
+  FileText, Bot, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, ToggleLeft, ToggleRight,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -52,302 +52,7 @@ function Section({
   )
 }
 
-// ── 1. Voice / Text Invoice Extractor ────────────────────────────────────────
-function InvoiceExtractor() {
-  const [text, setText] = useState('')
-  const [draft, setDraft] = useState<any>(null)
-  const [listening, setListening] = useState(false)
-  const recognitionRef = useRef<any>(null)
-
-  const extract = useMutation({
-    mutationFn: () => aiApi.extractInvoice(text),
-    onSuccess: (data) => setDraft(data),
-  })
-
-  function toggleVoice() {
-    const SpeechRecognition = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
-    if (!SpeechRecognition) { toast.error('Voice input not supported in this browser'); return }
-
-    if (listening) {
-      recognitionRef.current?.stop()
-      setListening(false)
-      return
-    }
-
-    const rec = new SpeechRecognition()
-    rec.lang = 'en-IN'          // Indian English — brand names stay in English for product matching
-    rec.continuous = true
-    rec.interimResults = true
-    recognitionRef.current = rec
-
-    let finalText = text
-    rec.onresult = (e: any) => {
-      let interim = ''
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) finalText += e.results[i][0].transcript + ' '
-        else interim = e.results[i][0].transcript
-      }
-      setText(finalText + interim)
-    }
-    rec.onerror = () => { setListening(false) }
-    rec.onend   = () => { setListening(false); setText(finalText.trim()) }
-
-    rec.start()
-    setListening(true)
-  }
-
-  return (
-    <Section icon={Sparkles} title="Voice / Text Invoice" description="Hindi, Gujarati, or English → draft invoice" defaultOpen>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder='"Mukesh ne 2 kilo Amul butter liya 55 rupaye kilo aur 3 Tata salt"'
-            rows={3}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-          />
-          <button
-            type="button"
-            onClick={toggleVoice}
-            title={listening ? 'Stop recording' : 'Start voice input (Hindi/English)'}
-            className={`absolute right-2 bottom-2 p-1.5 rounded-full transition-colors ${listening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
-          >
-            <svg className="w-4 h-4" fill={listening ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-          </button>
-        </div>
-        <button type="button" onClick={() => extract.mutate()} disabled={!text.trim() || extract.isPending} className="btn-primary self-end px-4">
-          {extract.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-        </button>
-      </div>
-      {listening && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping inline-block" />Listening… speak now</p>}
-      {extract.isError && <p className="mt-3 text-sm text-red-600">{AI_ERR(extract.error)}</p>}
-      {draft && <InvoiceDraftResult draft={draft} />}
-    </Section>
-  )
-}
-
-function InvoiceDraftResult({ draft }: { draft: any }) {
-  const navigate = useNavigate()
-
-  function openInNewInvoice() {
-    const lineItems = (draft.resolvedItems ?? []).map((r: any, i: number) => ({
-      key:         `ai-${i}`,
-      productId:   r.matchedProduct?.id,
-      description: r.matchedProduct?.name ?? r.raw.name,
-      qty:         r.raw.qty ?? 1,
-      rate:        r.raw.rate ?? r.matchedProduct?.salePrice ?? 0,
-      discountPct: r.raw.discountPct ?? 0,
-      gstRate:     r.matchedProduct?.gstRate ?? 0,
-      unit:        r.raw.unit ?? r.matchedProduct?.unit ?? 'pcs',
-      hsnSacCode:  r.matchedProduct?.hsnSacCode ?? null,
-    }))
-    const party = draft.resolvedParty
-      ? { id: draft.resolvedParty.id, name: draft.resolvedParty.name, phone: null, balance: 0, creditLimit: 0 }
-      : null
-    localStorage.setItem('ai_invoice_draft', JSON.stringify({ items: lineItems, party, notes: draft.notes ?? '' }))
-    navigate('/invoices/new')
-  }
-
-  return (
-    <div className="mt-5 space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${draft.overallConfidence >= 0.7 ? 'bg-green-100 text-green-700' : draft.overallConfidence >= 0.4 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-          {Math.round(draft.overallConfidence * 100)}% confidence
-        </span>
-        {draft.needsReview && <span className="flex items-center gap-1 text-xs text-yellow-600"><AlertTriangle className="w-3 h-3" /> Needs review</span>}
-      </div>
-      {draft.resolvedItems?.length > 0 && (
-        <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
-          {draft.resolvedItems.map((item: any, i: number) => (
-            <div key={i} className="flex items-center justify-between px-4 py-2.5 text-sm">
-              <span className="font-medium text-gray-900">{item.matchedProduct?.name ?? item.raw.name}</span>
-              <span className="text-gray-600">{item.raw.qty} {item.raw.unit} {item.raw.rate ? `@ ₹${item.raw.rate}` : ''}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {draft.calculatedTotals && (
-        <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-1">
-          <div className="flex justify-between text-gray-600"><span>Taxable</span><span>₹{draft.calculatedTotals.taxableTotal?.toFixed(2)}</span></div>
-          <div className="flex justify-between font-semibold text-gray-900 border-t border-gray-200 pt-1 mt-1"><span>Grand Total</span><span>₹{draft.calculatedTotals.grandTotal?.toFixed(2)}</span></div>
-        </div>
-      )}
-      <button
-        onClick={openInNewInvoice}
-        className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
-      >
-        <FileText className="w-4 h-4" /> Open in New Invoice
-      </button>
-    </div>
-  )
-}
-
-// ── 2. Bill Scanner ───────────────────────────────────────────────────────────
-function BillScanner() {
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [draft, setDraft] = useState<any>(null)
-  const [savedId, setSavedId] = useState<string | null>(null)
-  const [addingProduct, setAddingProduct] = useState<Record<number, boolean>>({})
-
-  const scan = useMutation({
-    mutationFn: async (file: File) => {
-      const base64 = await fileToBase64(file)
-      return aiApi.scanBill(base64, file.type as any)
-    },
-    onSuccess: (data) => { setDraft(data); setSavedId(null) },
-  })
-
-  const saveDraft = useMutation({
-    mutationFn: () => {
-      const items = (draft.resolvedItems ?? []).map((r: any) => ({
-        productId:   r.matchedProduct?.id ?? undefined,
-        description: r.matchedProduct?.name ?? r.raw.name,
-        qty:         r.raw.qty ?? 1,
-        unit:        r.raw.unit ?? 'pcs',
-        rate:        r.raw.rate ?? r.matchedProduct?.purchasePrice ?? 0,
-        gstRate:     r.matchedProduct?.gstRate ?? 0,
-        discountPct: 0,
-      }))
-      if (items.length === 0) throw new Error('No items to save.')
-      return invoiceApi.create({
-        txnType: 'purchase_invoice',
-        partyId: draft.resolvedSupplier?.id ?? null,
-        date:    draft.billDate ?? new Date().toISOString().slice(0, 10),
-        notes:   draft.billNo ? `Bill #${draft.billNo}` : 'Scanned via AI',
-        items,
-      })
-    },
-    onSuccess: (data) => {
-      setSavedId(data.id)
-      toast.success('Purchase draft saved!')
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? e.message ?? 'Failed to save draft'),
-  })
-
-  const addTocatalogue = async (item: any, idx: number) => {
-    setAddingProduct((p) => ({ ...p, [idx]: true }))
-    try {
-      await productApi.create({
-        name:          item.raw.name,
-        purchasePrice: item.raw.rate ?? 0,
-        salePrice:     item.raw.rate ?? 0,
-        unit:          item.raw.unit ?? 'pcs',
-        trackStock:    true,
-      })
-      toast.success(`"${item.raw.name}" added to catalogue`)
-      setDraft((d: any) => ({
-        ...d,
-        resolvedItems: d.resolvedItems.map((r: any, i: number) =>
-          i === idx
-            ? { ...r, isNewProduct: false, matchedProduct: { name: item.raw.name, purchasePrice: item.raw.rate, gstRate: 0 } }
-            : r
-        ),
-      }))
-    } catch {
-      toast.error('Failed to add product')
-    } finally {
-      setAddingProduct((p) => ({ ...p, [idx]: false }))
-    }
-  }
-
-  const newCount   = draft?.resolvedItems?.filter((r: any) => r.isNewProduct).length ?? 0
-  const totalCount = draft?.resolvedItems?.length ?? 0
-
-  return (
-    <Section icon={Camera} title="Scan Supplier Bill" description="Photo a bill → AI reads it, creates purchase draft" defaultOpen={false}>
-      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) scan.mutate(f) }} />
-      <button type="button" onClick={() => fileRef.current?.click()} disabled={scan.isPending} className="btn-primary">
-        {scan.isPending ? <><RefreshCw className="w-4 h-4 animate-spin" /> Reading...</> : <><Camera className="w-4 h-4" /> Upload Bill Photo</>}
-      </button>
-      {scan.isError && <p className="mt-3 text-sm text-red-600">{AI_ERR(scan.error)}</p>}
-
-      {draft && (
-        <div className="mt-5 space-y-4">
-          {/* Header row */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${draft.confidence >= 0.75 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-              {Math.round(draft.confidence * 100)}% confidence
-            </span>
-            {newCount > 0 && (
-              <span className="text-xs text-orange-600 font-medium">
-                {newCount} item{newCount > 1 ? 's' : ''} not in catalogue
-              </span>
-            )}
-            {draft.resolvedSupplier && (
-              <span className="text-xs text-gray-500">Supplier: <span className="font-medium text-gray-800">{draft.resolvedSupplier.name}</span></span>
-            )}
-            {draft.billNo && <span className="text-xs text-gray-400">Bill #{draft.billNo}</span>}
-          </div>
-
-          {/* Items list */}
-          <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
-            {draft.resolvedItems?.map((item: any, i: number) => (
-              <div key={i} className="flex items-center justify-between px-4 py-2.5 text-sm gap-3">
-                <div className="flex-1 min-w-0">
-                  <span className="font-medium text-gray-900">{item.matchedProduct?.name ?? item.raw.name}</span>
-                  {item.isNewProduct && (
-                    <span className="ml-2 text-xs text-orange-500">not in catalogue</span>
-                  )}
-                </div>
-                <span className="text-gray-600 flex-shrink-0">
-                  {item.raw.qty} {item.raw.unit} @ ₹{item.raw.rate}
-                </span>
-                {item.isNewProduct && (
-                  <button
-                    type="button"
-                    onClick={() => addTocatalogue(item, i)}
-                    disabled={addingProduct[i]}
-                    className="flex items-center gap-1 text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded font-medium flex-shrink-0"
-                  >
-                    {addingProduct[i]
-                      ? <RefreshCw className="w-3 h-3 animate-spin" />
-                      : <Plus className="w-3 h-3" />
-                    }
-                    Add
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Save as purchase draft */}
-          {savedId ? (
-            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-              <CheckCircle className="w-4 h-4 flex-shrink-0" />
-              Purchase draft saved —
-              <a href={`/invoices/${savedId}`} className="font-medium underline">View Invoice</a>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => saveDraft.mutate()}
-                disabled={saveDraft.isPending || totalCount === 0}
-                className="btn-primary flex items-center gap-2"
-              >
-                {saveDraft.isPending
-                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving...</>
-                  : <><ShoppingCart className="w-4 h-4" /> Save as Purchase Draft</>
-                }
-              </button>
-              {newCount > 0 && (
-                <p className="text-xs text-orange-500">
-                  {newCount} item{newCount > 1 ? 's' : ''} not in catalogue — will save with description only
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </Section>
-  )
-}
-
-// ── 3. Expense Categorizer ────────────────────────────────────────────────────
+// ── 1. Expense Categorizer ────────────────────────────────────────────────────
 function ExpenseCategorizer() {
   const [desc, setDesc] = useState('')
   const [amount, setAmount] = useState('')
@@ -368,7 +73,7 @@ function ExpenseCategorizer() {
   return (
     <Section icon={Tag} title="Expense Categorizer" description="Paste expense description → AI tags it with category and GL code" defaultOpen={false}>
       <div className="flex gap-2 flex-wrap">
-        <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder='e.g. "Diesel for delivery van"' className="input flex-1 min-w-48" />
+        <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder='e.g. "Laundry service for banquet linen"' className="input flex-1 min-w-48" />
         <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount ₹" type="number" className="input w-32" />
         <button type="button" onClick={() => categorize.mutate()} disabled={!desc.trim() || !amount || categorize.isPending} className="btn-primary">
           {categorize.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />}
@@ -389,7 +94,7 @@ function ExpenseCategorizer() {
   )
 }
 
-// ── 4. Cash Flow Forecast ─────────────────────────────────────────────────────
+// ── 2. Cash Flow Forecast ─────────────────────────────────────────────────────
 function CashflowForecastSection() {
   const [horizon, setHorizon] = useState<7 | 30>(7)
 
@@ -481,8 +186,8 @@ function CashflowForecastSection() {
   )
 }
 
-// ── 5. Party Duplicates ───────────────────────────────────────────────────────
-function PartyDuplicates() {
+// ── 3. Guest Duplicates ───────────────────────────────────────────────────────
+function GuestDuplicates() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['ai-party-duplicates'],
     queryFn:  aiApi.partyDuplicates,
@@ -490,14 +195,14 @@ function PartyDuplicates() {
   })
 
   return (
-    <Section icon={Users} title="Duplicate Party Detector" description="Find parties entered twice — same phone, GSTIN, or similar name" defaultOpen={false}>
+    <Section icon={Users} title="Duplicate Guest Detector" description="Find guests entered twice — same phone, ID number, or similar name" defaultOpen={false}>
       <button type="button" onClick={() => refetch()} disabled={isLoading} className="btn-primary mb-4">
         {isLoading ? <><RefreshCw className="w-4 h-4 animate-spin" /> Scanning...</> : <><Search className="w-4 h-4" /> Scan for Duplicates</>}
       </button>
 
       {isError && <p className="text-sm text-red-600">{AI_ERR(error)}</p>}
 
-      {data?.length === 0 && <p className="text-sm text-green-600 flex items-center gap-1"><CheckCircle className="w-4 h-4" /> No duplicates found — your party list looks clean.</p>}
+      {data?.length === 0 && <p className="text-sm text-green-600 flex items-center gap-1"><CheckCircle className="w-4 h-4" /> No duplicates found — your guest list looks clean.</p>}
 
       {data?.length > 0 && (
         <div className="space-y-3">
@@ -526,7 +231,7 @@ function PartyDuplicates() {
   )
 }
 
-// ── 6. GST Filing Summary ─────────────────────────────────────────────────────
+// ── 4. GST Filing Summary ─────────────────────────────────────────────────────
 function GstSummary() {
   const thisMonth = new Date().toISOString().slice(0, 7)
   const [month, setMonth] = useState(thisMonth)
@@ -605,61 +310,7 @@ function GstSummary() {
   )
 }
 
-// ── 7. Demand Forecast ────────────────────────────────────────────────────────
-function DemandForecastSection() {
-  const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['ai-demand-forecast'],
-    queryFn:  aiApi.demandForecast,
-    staleTime: 10 * 60 * 1000,
-  })
-
-  const urgencyStyle: Record<string, string> = {
-    critical: 'bg-red-100 text-red-700',
-    soon:     'bg-orange-100 text-orange-700',
-    ok:       'bg-green-100 text-green-700',
-  }
-
-  return (
-    <Section icon={Package} title="Demand Forecast" description="Which SKUs will stock out, and when — 14-day view" defaultOpen={false}>
-      <button type="button" onClick={() => refetch()} disabled={isLoading} className="btn-primary mb-4">
-        {isLoading ? <><RefreshCw className="w-4 h-4 animate-spin" /> Forecasting...</> : <><Package className="w-4 h-4" /> Run Forecast</>}
-      </button>
-
-      {isError && <p className="text-sm text-red-600">{AI_ERR(error)}</p>}
-      {data?.length === 0 && <p className="text-sm text-gray-500">No tracked-stock products found, or sales data insufficient.</p>}
-
-      {data?.length > 0 && (
-        <div className="space-y-2">
-          {data.map((item: any) => (
-            <div key={item.productId} className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{item.productName}</p>
-                <p className="text-xs text-gray-500">
-                  {item.currentStock} in stock · {item.avgDailySales.toFixed(1)}/day avg sales
-                </p>
-              </div>
-              <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">Days left</p>
-                  <p className={`text-sm font-bold ${item.daysUntilStockout <= 3 ? 'text-red-600' : item.daysUntilStockout <= 10 ? 'text-orange-600' : 'text-gray-700'}`}>
-                    {item.daysUntilStockout === -1 ? '∞' : item.daysUntilStockout}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">Suggest order</p>
-                  <p className="text-sm font-semibold text-gray-900">{item.suggestedOrder}</p>
-                </div>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${urgencyStyle[item.urgency]}`}>{item.urgency}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Section>
-  )
-}
-
-// ── 8. Credit Risk ────────────────────────────────────────────────────────────
+// ── 5. Credit Risk ────────────────────────────────────────────────────────────
 function CreditRiskChecker() {
   const [partyId, setPartyId] = useState('')
   const [activeId, setActiveId] = useState('')
@@ -675,9 +326,9 @@ function CreditRiskChecker() {
     high_risk: 'bg-red-100 text-red-700',
   }
   return (
-    <Section icon={ShieldAlert} title="Customer Credit Risk" description="AI credit score from payment history — paste a party ID to check" defaultOpen={false}>
+    <Section icon={ShieldAlert} title="Corporate Account Credit Risk" description="AI credit score from payment history — paste a corporate/agent account ID to check" defaultOpen={false}>
       <div className="flex gap-2">
-        <input value={partyId} onChange={(e) => setPartyId(e.target.value)} placeholder="Paste party UUID…" className="input flex-1 text-xs font-mono" />
+        <input value={partyId} onChange={(e) => setPartyId(e.target.value)} placeholder="Paste account UUID…" className="input flex-1 text-xs font-mono" />
         <button type="button" onClick={() => setActiveId(partyId.trim())} disabled={!partyId.trim() || isLoading} className="btn-primary px-4">
           {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Check'}
         </button>
@@ -703,7 +354,7 @@ function CreditRiskChecker() {
   )
 }
 
-// ── 9. Payment Reminders ──────────────────────────────────────────────────────
+// ── 6. Payment Reminders ──────────────────────────────────────────────────────
 function PaymentReminders() {
   const queryClient = useQueryClient()
   const { data: pending, isLoading } = useQuery({ queryKey: ['ai-reminders'], queryFn: aiApi.pendingReminders })
@@ -712,7 +363,7 @@ function PaymentReminders() {
   const reject   = useMutation({ mutationFn: (id: string) => aiApi.rejectReminder(id),  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ai-reminders'] }) })
 
   return (
-    <Section icon={Clock} title="Payment Reminders" description="AI drafts WhatsApp reminders for overdue udhaar" defaultOpen={false}>
+    <Section icon={Clock} title="Payment Reminders" description="AI drafts WhatsApp reminders for overdue guest and corporate account balances" defaultOpen={false}>
       <div className="flex items-center justify-between mb-4">
         <button type="button" onClick={() => generate.mutate()} disabled={generate.isPending} className="btn-primary text-xs px-3 py-1.5">
           {generate.isPending ? <><RefreshCw className="w-3 h-3 animate-spin" /> Generating...</> : <><Sparkles className="w-3 h-3" /> Generate Drafts</>}
@@ -748,7 +399,7 @@ function PaymentReminders() {
   )
 }
 
-// ── 10. Chat Assistant ────────────────────────────────────────────────────────
+// ── 7. Chat Assistant ────────────────────────────────────────────────────────
 function ChatAssistant() {
   const [history, setHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
   const [input, setInput] = useState('')
@@ -775,10 +426,10 @@ function ChatAssistant() {
   }
 
   const starters = [
-    'Aaj kitna sale hua?',
-    'Who owes the most?',
-    'Which items are low on stock?',
-    'Last month ka profit kya tha?',
+    'Aaj kitni occupancy hai?',
+    'Which bookings check out today?',
+    'Who has pending advance dues?',
+    'Last month ka revenue kya tha?',
   ]
 
   return (
@@ -843,7 +494,46 @@ function ChatAssistant() {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
+// ── AI access management — owner/super_user only ──────────────────────────────
+// Grants or revokes individual staff members' access to this whole page.
+// Owner and super_user always have access regardless of this list.
+function AiAccessManager() {
+  const { data } = useUsers()
+  const setAiAccess = useSetAiAccess()
+  const users: any[] = (data as any)?.users ?? []
+  const toggleable = users.filter((u) => u.role !== 'owner' && u.role !== 'super_user')
+
+  if (toggleable.length === 0) return null
+
+  return (
+    <Section icon={Users} title="AI Access" description="Choose which staff members can see this page." defaultOpen={false}>
+      <div className="space-y-1">
+        {toggleable.map((u) => (
+          <div key={u.id} className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm font-medium text-gray-900">{u.name}</div>
+              <div className="text-xs text-gray-500 capitalize">{u.role}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAiAccess.mutate({ id: u.id, aiEnabled: !u.aiEnabled })}
+              disabled={setAiAccess.isPending}
+              className={`flex items-center gap-1.5 text-sm font-medium ${u.aiEnabled ? 'text-primary-600' : 'text-gray-400'}`}
+            >
+              {u.aiEnabled ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+              {u.aiEnabled ? 'Enabled' : 'Disabled'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </Section>
+  )
+}
+
 export function AIPage() {
+  const role = useAuthStore((s) => s.user?.role)
+  const canManageAiAccess = role === 'owner' || role === 'super_user'
+
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-4">
       <div>
@@ -851,29 +541,18 @@ export function AIPage() {
           <Sparkles className="w-5 h-5 text-primary-600" /> AI Assistant
         </h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          10 AI features — all drafts, always human-approved before anything saves or sends.
+          7 AI features — all drafts, always human-approved before anything saves or sends.
         </p>
       </div>
 
+      {canManageAiAccess && <AiAccessManager />}
       <ChatAssistant />
       <CashflowForecastSection />
-      <DemandForecastSection />
       <GstSummary />
       <ExpenseCategorizer />
-      <PartyDuplicates />
-      <InvoiceExtractor />
-      <BillScanner />
+      <GuestDuplicates />
       <CreditRiskChecker />
       <PaymentReminders />
     </div>
   )
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload  = () => resolve((reader.result as string).split(',')[1]!)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
 }

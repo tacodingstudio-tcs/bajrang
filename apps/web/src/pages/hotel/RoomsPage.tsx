@@ -2,8 +2,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hotelApi } from '@/lib/api'
+import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { Plus, Pencil, X, BedDouble, Wifi, Wind, Tv2 } from 'lucide-react'
+import { Plus, Pencil, X, BedDouble, Wifi, Wind, Tv2, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const ROOM_TYPES = [
@@ -39,8 +40,11 @@ function RoomForm({
     hasGeyser:    initial?.hasGeyser ?? true,
     hasWifi:      initial?.hasWifi   ?? true,
     viewType:     initial?.viewType  ?? '',
+    imageUrl:     initial?.imageUrl  ?? '',
+    description:  initial?.description ?? '',
     notes:        initial?.notes     ?? '',
   })
+  const [images, setImages] = useState<string[]>(initial?.images ?? [])
 
   const f = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -48,6 +52,10 @@ function RoomForm({
   const fb = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm({ ...form, [k]: e.target.checked })
+
+  function setImage(i: number, url: string) { setImages((s) => s.map((u, idx) => idx === i ? url : u)) }
+  function addImage() { setImages((s) => [...s, '']) }
+  function removeImage(i: number) { setImages((s) => s.filter((_, idx) => idx !== i)) }
 
   function handleSubmit() {
     if (!form.roomNo || !form.ratePerNight) { toast.error('Room number and rate are required'); return }
@@ -64,6 +72,9 @@ function RoomForm({
       hasGeyser:    form.hasGeyser,
       hasWifi:      form.hasWifi,
       viewType:     form.viewType || undefined,
+      imageUrl:     form.imageUrl || undefined,
+      images:       images.map((u) => u.trim()).filter(Boolean),
+      description:  form.description || undefined,
       notes:        form.notes || undefined,
     })
   }
@@ -135,6 +146,35 @@ function RoomForm({
           </div>
 
           <div>
+            <label className="label">Cover Image URL</label>
+            <input className="input" value={form.imageUrl} onChange={f('imageUrl')} placeholder="https://…" />
+            <p className="text-xs text-gray-400 mt-1">The thumbnail shown on the homepage and room list. All rooms of the same type share one — set it on any one of them.</p>
+          </div>
+
+          <div>
+            <label className="label">Gallery photos (for the room's detail page)</label>
+            <div className="space-y-2">
+              {images.map((url, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input className="input" value={url} onChange={(e) => setImage(i, e.target.value)} placeholder="https://…" />
+                  <button type="button" onClick={() => removeImage(i)} className="text-gray-300 hover:text-red-500 shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={addImage} className="btn-ghost text-xs mt-2"><Plus className="w-3.5 h-3.5" /> Add photo</button>
+            <p className="text-xs text-gray-400 mt-1">All photos shown together on the room's detail page. Same sharing rule — set once per room type.</p>
+          </div>
+
+          <div>
+            <label className="label">Description (for the website)</label>
+            <textarea className="input h-20 resize-none" value={form.description} onChange={f('description')}
+              placeholder="A brief, honest description of this room — what makes it worth booking." />
+            <p className="text-xs text-gray-400 mt-1">Shown on the room's detail page. Same sharing rule as the image — set it on any one room of this type.</p>
+          </div>
+
+          <div>
             <label className="label">Notes</label>
             <textarea className="input h-16 resize-none" value={form.notes} onChange={f('notes')} placeholder="e.g. adjoining rooms, connecting door…" />
           </div>
@@ -152,6 +192,9 @@ function RoomForm({
 
 export function RoomsPage() {
   const queryClient = useQueryClient()
+  // viewer (housekeeping) has read-only server-side access to rooms — hide
+  // the edit/add/status-change controls rather than let them 403 on click.
+  const isViewer = useAuthStore((s) => s.user?.role === 'viewer')
   const [showAdd, setShowAdd]     = useState(false)
   const [editing, setEditing]     = useState<any | null>(null)
   const [statusFilter, setStatus] = useState<string>('')
@@ -203,9 +246,11 @@ export function RoomsPage() {
         title="Rooms"
         subtitle={`${allRooms.length} rooms total`}
         action={
-          <button type="button" onClick={() => setShowAdd(true)} className="btn-primary">
-            <Plus className="w-4 h-4" /> Add Room
-          </button>
+          !isViewer && (
+            <button type="button" onClick={() => setShowAdd(true)} className="btn-primary">
+              <Plus className="w-4 h-4" /> Add Room
+            </button>
+          )
         }
       />
 
@@ -237,7 +282,7 @@ export function RoomsPage() {
           <div className="text-center py-12 text-gray-400">Loading…</div>
         ) : rooms.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
-            No rooms yet. <button type="button" onClick={() => setShowAdd(true)} className="text-primary-600 hover:underline">Add your first room</button>
+            No rooms yet.{!isViewer && <> <button type="button" onClick={() => setShowAdd(true)} className="text-primary-600 hover:underline">Add your first room</button></>}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -249,14 +294,16 @@ export function RoomsPage() {
                   className={`relative border rounded-xl p-3 transition-shadow hover:shadow-md ${sc.bg}`}
                 >
                   {/* Edit button */}
-                  <button
-                    type="button"
-                    onClick={() => setEditing(room)}
-                    className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600 rounded-md hover:bg-white/50"
-                    title="Edit room"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
+                  {!isViewer && (
+                    <button
+                      type="button"
+                      onClick={() => setEditing(room)}
+                      className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600 rounded-md hover:bg-white/50"
+                      title="Edit room"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   <div className={`text-2xl font-bold ${sc.color} mb-1`}>{room.roomNo}</div>
                   <div className="text-xs text-gray-600 capitalize mb-2">
@@ -280,7 +327,7 @@ export function RoomsPage() {
                   </span>
 
                   {/* Quick status change */}
-                  {room.status !== 'occupied' && (
+                  {!isViewer && room.status !== 'occupied' && (
                     <div className="mt-2 flex gap-1 flex-wrap">
                       {room.status !== 'available' && (
                         <button
