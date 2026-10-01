@@ -60,8 +60,12 @@ if (process.env['NODE_ENV'] === 'production') {
 // ── Security plugins ──────────────────────────────────────────────────────────
 await app.register(helmet, { contentSecurityPolicy: false })
 
+const allowedOrigins = (process.env['WEB_URL'] ?? 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim())
+
 await app.register(cors, {
-  origin: process.env['WEB_URL'] ?? 'http://localhost:5173',
+  origin: allowedOrigins,
   credentials: true,
 })
 
@@ -277,6 +281,8 @@ const port = parseInt(process.env['PORT'] ?? '3000', 10)
 try {
   await app.listen({ port, host: '0.0.0.0' })
   app.log.info(`Server running on http://localhost:${port}`)
+  // Free-tier hosting has no separate worker service — run BullMQ workers in this process.
+  if (process.env['RUN_WORKERS_INLINE'] === 'true') await import('./workers/index.js')
 } catch (err) {
   app.log.error(err)
   process.exit(1)
