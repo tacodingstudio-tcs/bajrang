@@ -47,5 +47,8 @@ services:
       # Free plan has no worker service — run workers inside the API process.
       - key: RUN_WORKERS_INLINE
         value: true
+      # Neon ignores Prisma's ?schema= search_path; this makes tenant clients SET LOCAL it.
+      - key: FORCE_SEARCH_PATH
+        value: true
       - key: STORAGE_TYPE
         value: local

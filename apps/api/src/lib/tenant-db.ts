@@ -15,6 +15,70 @@ import { PrismaClient } from '@prisma/client'
 
 const _cache = new Map<string, PrismaClient>()
 
+// ── search_path enforcement ───────────────────────────────────────────────────
+// Prisma's ?schema= param sets search_path on the connection locally, but Neon
+// does not apply it (SHOW search_path stays "$user", public), so unqualified raw
+// SQL ("FROM invoices") fails with "relation does not exist". When
+// FORCE_SEARCH_PATH=true we wrap each tenant client so every raw query and every
+// transaction first runs `SET LOCAL search_path` on the SAME connection.
+// Model queries (prisma.invoice.create ...) are already schema-qualified by Prisma.
+const RAW_METHODS = new Set(['$queryRawUnsafe', '$executeRawUnsafe', '$queryRaw', '$executeRaw'])
+
+type Runner = (tx: any) => Promise<unknown>
+interface LazyRaw extends PromiseLike<unknown> { __run: Runner }
+
+function setPath(tx: any, schemaName: string) {
+  // schemaName is validated against SAFE_SCHEMA_RE by getTenantDb
+  return tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}"`)
+}
+
+export function withSearchPath(client: PrismaClient, schemaName: string): PrismaClient {
+  const lazyRaw = (method: string, args: unknown[]): LazyRaw => {
+    const run: Runner = (tx) => tx[method](...args)
+    let started: Promise<unknown> | undefined
+    const exec = () =>
+      (started ??= (client as any).$transaction(async (tx: any) => {
+        await setPath(tx, schemaName)
+        return run(tx)
+      }))
+    return {
+      __run: run,
+      then: (res, rej) => exec().then(res, rej),
+    }
+  }
+
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'string' && RAW_METHODS.has(prop)) {
+        return (...args: unknown[]) => lazyRaw(prop, args)
+      }
+      if (prop === '$transaction') {
+        return (arg: unknown, ...rest: unknown[]) => {
+          if (typeof arg === 'function') {
+            // interactive transaction: set the path first, on the tx's own connection
+            return (target as any).$transaction(async (tx: any) => {
+              await setPath(tx, schemaName)
+              return (arg as (tx: any) => unknown)(tx)
+            }, ...rest)
+          }
+          if (Array.isArray(arg) && arg.length > 0 && arg.every((e) => e && typeof e.__run === 'function')) {
+            // batch of wrapped raw queries: run sequentially in one transaction
+            return (target as any).$transaction(async (tx: any) => {
+              await setPath(tx, schemaName)
+              const out: unknown[] = []
+              for (const e of arg as LazyRaw[]) out.push(await e.__run(tx))
+              return out
+            }, ...rest)
+          }
+          return (target as any).$transaction(arg, ...rest)
+        }
+      }
+      const v = Reflect.get(target, prop, target)
+      return typeof v === 'function' ? v.bind(target) : v
+    },
+  }) as PrismaClient
+}
+
 /**
  * Returns a PrismaClient scoped to the given tenant schema.
  * Subsequent calls with the same schema return the cached client.
@@ -49,8 +113,9 @@ export function getTenantDb(schemaName: string): PrismaClient {
     log: process.env.NODE_ENV === 'development' ? ['error'] : ['error'],
   })
 
-  _cache.set(schemaName, client)
-  return client
+  const scoped = process.env['FORCE_SEARCH_PATH'] === 'true' ? withSearchPath(client, schemaName) : client
+  _cache.set(schemaName, scoped)
+  return scoped
 }
 
 /** Called on graceful shutdown to close all tenant DB connections. */

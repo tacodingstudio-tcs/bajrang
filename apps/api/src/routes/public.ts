@@ -35,16 +35,22 @@ function generateFolioNo(prefix: string = 'FLO'): string {
 // selector, so we resolve the one active hotel tenant. If this platform
 // ever hosts multiple hotel websites, swap this for a slug/domain lookup.
 async function resolveHotelTenant() {
-  const tenant = await db.tenant.findFirst({
-    where: { isActive: true, slug: { contains: 'hotel' } },
+  // Match on the branch's domainType (stored in each tenant schema), not the
+  // slug text, so the business name can be anything (e.g. "Bajrang Rest Inn").
+  const tenants = await db.tenant.findMany({
+    where:   { isActive: true },
+    orderBy: { createdAt: 'asc' },
   })
-  if (!tenant) throw Object.assign(new Error('No hotel tenant configured'), { statusCode: 404 })
 
-  const tdb = getTenantDb(tenant.schemaName)
-  const branch = await tdb.branch.findFirst({ where: { domainType: 'hotel', isActive: true } })
-  if (!branch) throw Object.assign(new Error('No active hotel branch'), { statusCode: 404 })
+  for (const tenant of tenants) {
+    const tdb = getTenantDb(tenant.schemaName)
+    const branch = await tdb.branch
+      .findFirst({ where: { domainType: 'hotel', isActive: true } })
+      .catch(() => null)
+    if (branch) return { tenant, branch, tdb, schemaName: tenant.schemaName }
+  }
 
-  return { tenant, branch, tdb, schemaName: tenant.schemaName }
+  throw Object.assign(new Error('No hotel tenant configured'), { statusCode: 404 })
 }
 
 export const publicRoutes: FastifyPluginAsync = async (app) => {

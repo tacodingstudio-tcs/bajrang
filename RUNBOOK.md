@@ -175,7 +175,7 @@ Create **New → Web Service**, repo `bajrang`, branch `master`.
 
 Environment variables (set in the dashboard; never commit values):
 `NODE_VERSION=22`, `NODE_ENV=production`, `PORT=3000`, `RUN_WORKERS_INLINE=true`,
-`STORAGE_TYPE=local`, `JWT_EXPIRES_IN=15m`, `DATABASE_URL` (Neon **direct** string),
+`STORAGE_TYPE=local`, `FORCE_SEARCH_PATH=true` (required on Neon), `JWT_EXPIRES_IN=15m`, `DATABASE_URL` (Neon **direct** string),
 `REDIS_URL`, `JWT_SECRET` (64-char random), `WEB_URL` (comma-separated allowed origins,
 e.g. the Vercel domain), plus optional `RAZORPAY_*`, `WHATSAPP_*`, `ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`.
@@ -220,7 +220,7 @@ the `pgcrypto` extension (`gen_random_uuid`); Neon supports `CREATE EXTENSION pg
 | 9 | Render startup: `Cannot find package '@billing/pdf'` | `apps/api/package.json` lacked the dep (only worked locally via `scripts/fix-workspace-links.mjs` junctions) | Added `"@billing/pdf": "workspace:*"` + lockfile (commit `350cddc`) |
 | 10 | Render shows 2 paid services | Blueprint read old `render.yaml` / wrong branch | Use `master`; or create a plain Web Service |
 | 11 | Local `docker build -f Dockerfile.api` fails at `corepack prepare pnpm` | Network / antivirus HTTPS interception on this machine (Render unaffected) | Not needed for Render Node runtime; ignore or fix the local network |
-| 12 | Live `POST /api/tenants/register` returns `500` | `public.create_tenant_schema()` lives only in `docker/init.sql` (runs on first start of the local container), not in any Prisma migration, so Neon never got it | Load `neon-create-tenant-schema.sql` (init.sql minus roles/grants) into Neon once — see section 3.3 |
+| 12 | Live `POST /api/tenants/register` returns `500` | (a) `public.create_tenant_schema()` lives only in `docker/init.sql`, not in any Prisma migration, so Neon never got it; (b) **Neon ignores Prisma's `?schema=` search_path** (`SHOW search_path` stays `"$user", public`), so unqualified raw SQL like `INSERT INTO invoice_sequences` fails with `relation does not exist` (Render log: `42P01`, `tenants.ts:215`) | (a) load `neon-create-tenant-schema.sql` once (section 3.3b). (b) set `FORCE_SEARCH_PATH=true` on Render — `lib/tenant-db.ts` then wraps every raw query/transaction in `SET LOCAL search_path` (diagnose with `packages/db/prisma/check-searchpath.ts`) |
 | 13 | Public site: `No hotel tenant configured` | `resolveHotelTenant()` required a slug containing "hotel" | Now matches the tenant whose branch has `domainType='hotel'` (`routes/public.ts`, local change — commit + push needed) |
 | 14 | Admin login shows "Connection error — check your internet" | CORS: live API sends no `access-control-allow-origin` for the Vercel origins because `WEB_URL` on Render does not list them | Set `WEB_URL=https://bajrang-rest-inn.vercel.app,https://bajrang-rest-inn-admin.vercel.app` on Render and redeploy |
 | 15 | Vercel opens a "request access / log in" page | Deployment Protection (SSO) on | `npx vercel project protection disable <project> --sso` |
@@ -254,7 +254,7 @@ the new service gets a new URL.
 ## 7. Open items
 - [x] Render deploy of `350cddc` is up; `/health` returns ok
 - [ ] **Set `WEB_URL` on Render** to both Vercel origins (fixes admin "Connection error")
-- [ ] **Fix live registration 500** (need Render logs); then register Bajrang Rest Inn (owner Bajrang, 8291584341)
+- [ ] Push the `FORCE_SEARCH_PATH` fix, set `FORCE_SEARCH_PATH=true` on Render, then register Bajrang Rest Inn (owner Bajrang, 8291584341, PIN 1012)
 - [ ] Commit + push `routes/public.ts` lookup change, `apps/web` + `apps/website` Vercel files
 - [ ] Run `prisma migrate deploy` against Neon if missing tables are confirmed
 - [x] `VITE_API_URL` set to the new API for website and admin, both deployed to production
