@@ -190,6 +190,16 @@ cd packages/db
 DATABASE_URL="<neon direct url>" npx prisma migrate deploy
 ```
 
+### 3.3b Install `create_tenant_schema()` on Neon (required once)
+The function is **not** created by Prisma migrations. `neon-create-tenant-schema.sql` is
+`docker/init.sql` lines 66+ with the local-only role grants removed (tested: provisions 28
+tables). Run with the Neon **direct** URL (no local psql needed):
+```bash
+docker run --rm -i postgres:16-alpine psql "<NEON_DIRECT_URL>" -v ON_ERROR_STOP=1 -f - < neon-create-tenant-schema.sql
+```
+Then register the hotel (section 1.5 payload against the live API). Registration also needs
+the `pgcrypto` extension (`gen_random_uuid`); Neon supports `CREATE EXTENSION pgcrypto`.
+
 ### 3.4 Verify
 `curl https://<service>.onrender.com/health` → `{"status":"ok",...}`
 
@@ -210,7 +220,7 @@ DATABASE_URL="<neon direct url>" npx prisma migrate deploy
 | 9 | Render startup: `Cannot find package '@billing/pdf'` | `apps/api/package.json` lacked the dep (only worked locally via `scripts/fix-workspace-links.mjs` junctions) | Added `"@billing/pdf": "workspace:*"` + lockfile (commit `350cddc`) |
 | 10 | Render shows 2 paid services | Blueprint read old `render.yaml` / wrong branch | Use `master`; or create a plain Web Service |
 | 11 | Local `docker build -f Dockerfile.api` fails at `corepack prepare pnpm` | Network / antivirus HTTPS interception on this machine (Render unaffected) | Not needed for Render Node runtime; ignore or fix the local network |
-| 12 | Live `POST /api/tenants/register` returns `500 Internal server error` (e.g. `req-8`) | Cause not yet identified; Render logs needed. Suspects: Prisma migrations never run on Neon, or tenant-schema creation failing | Read Render logs around the request id; run `prisma migrate deploy` against Neon |
+| 12 | Live `POST /api/tenants/register` returns `500` | `public.create_tenant_schema()` lives only in `docker/init.sql` (runs on first start of the local container), not in any Prisma migration, so Neon never got it | Load `neon-create-tenant-schema.sql` (init.sql minus roles/grants) into Neon once — see section 3.3 |
 | 13 | Public site: `No hotel tenant configured` | `resolveHotelTenant()` required a slug containing "hotel" | Now matches the tenant whose branch has `domainType='hotel'` (`routes/public.ts`, local change — commit + push needed) |
 | 14 | Admin login shows "Connection error — check your internet" | CORS: live API sends no `access-control-allow-origin` for the Vercel origins because `WEB_URL` on Render does not list them | Set `WEB_URL=https://bajrang-rest-inn.vercel.app,https://bajrang-rest-inn-admin.vercel.app` on Render and redeploy |
 | 15 | Vercel opens a "request access / log in" page | Deployment Protection (SSO) on | `npx vercel project protection disable <project> --sso` |
