@@ -4,7 +4,7 @@ Everything done to run this project locally and deploy it, in order, including t
 problems hit and their fixes. **No secrets belong in this file** — keep them in
 `apps/api/.env` (local) and the Render / Vercel dashboards (production).
 
-Last updated: 2026-10-01
+Last updated: 2026-10-01 (admin deployed, CORS + registration issues logged)
 
 ---
 
@@ -16,11 +16,11 @@ Last updated: 2026-10-01
 | Background workers (BullMQ) | Same process as the API | — | `RUN_WORKERS_INLINE=true`; no separate worker service |
 | Database | Neon Postgres | — | Use the **direct** (non-pooled) connection string |
 | Redis | Upstash or Render Key Value | — | Set `REDIS_URL` |
-| Public website (`apps/website`) | Vercel | — | Calls `VITE_API_URL` + `/api/public` |
-| Admin web (`apps/web`) | not deployed yet | — | Vite `base: '/admin/'` |
+| Public website (`apps/website`) | Vercel project `website` | — | Calls `VITE_API_URL` + `/api/public`; https://bajrang-rest-inn.vercel.app |
+| Admin web (`apps/web`) | Vercel project `bajrang-rest-inn-admin` | — | Vite `base: '/admin/'`; https://bajrang-rest-inn.vercel.app/admin (proxied) and https://bajrang-rest-inn-admin.vercel.app/admin/ |
 
 Source repo: `https://github.com/tacodingstudio-tcs/bajrang` (branch `master`).
-Render account: tacodingstudio@gmail.com. Another paid service ("tacoding") exists in the
+Live API: `https://bajrang-v7d6.onrender.com`. Render account: tacodingstudio@gmail.com. Another paid service ("tacoding") exists in the
 same account; this API is deliberately on the Free plan.
 
 ---
@@ -80,6 +80,18 @@ cd apps/web     && pnpm dev    # http://localhost:5173/admin/
 cd apps/website && pnpm dev    # http://localhost:5174/
 ```
 
+### 1.7 Logins
+Admin login takes **three** fields: Business phone (`tenantPhone`), Your phone (`phone`) and a
+4-digit PIN. For the owner both phones are the number used at registration.
+
+| Environment | Hotel | Phones | PIN | Status |
+|---|---|---|---|---|
+| Local (`localhost:3001`) | Demo Hotel | 9000000001 | 1234 | Created locally; works only against the local DB |
+| Live (Render + Neon) | Bajrang Rest Inn | 8291584341 | 1012 | **Not created yet** — registration returned HTTP 500 (see section 4, #12) |
+
+Typing the local demo credentials on the live admin shows "Invalid phone number or PIN"
+(real 401) because that account does not exist on Neon.
+
 ---
 
 ## 2. Deploy the website to Vercel
@@ -103,6 +115,37 @@ npx vercel deploy --prod    # production (not run yet)
 - API URL comes from `VITE_API_URL` (`apps/website/.env.production`, or a Vercel env var).
   It currently points at the old suspended Render URL — **update it to the new API URL and
   redeploy**.
+
+### 2.1 Admin app (`apps/web`) as a second Vercel project
+`apps/web` is a separate Vercel project (`bajrang-rest-inn-admin`). Files in `apps/web`:
+`vercel.json`, `.vercelignore`, `.env.production` (`VITE_API_URL`), and a self-contained
+`tsconfig.json`. `vercel.json` install command runs
+`npm pkg delete dependencies.@billing/shared devDependencies.@billing/shared && npm install`
+because `workspace:*` cannot be installed by npm and the package is unused in `src/`.
+Vite `base` is `/admin/`, so `vercel.json` rewrites `/admin/<file.ext>` to `/<file.ext>` and
+other `/admin/*` to `/index.html`.
+
+```bash
+cd apps/web
+npx vercel link --yes --project bajrang-rest-inn-admin   # first time only
+npx vercel deploy --prod --yes
+npx vercel project protection disable bajrang-rest-inn-admin --sso   # make public
+```
+
+The website project serves `/admin` by rewriting to the admin project
+(`apps/website/vercel.json`: `/admin`, `/admin/`, `/admin/:path*` ->
+`https://bajrang-rest-inn-admin.vercel.app/admin...`). The explicit `/admin/` rule is needed;
+without it the trailing-slash URL falls through to the website's SPA.
+
+### 2.2 Public URL / alias
+Preview URLs are random per deploy. The friendly URL is an alias that must be re-pointed
+after every website deploy (or rename the Vercel project to `bajrang-rest-inn` to get it
+automatically):
+```bash
+npx vercel alias set <new-deployment-url> bajrang-rest-inn.vercel.app
+npx vercel project protection disable website --sso    # Deployment Protection off = public
+```
+Domains cannot contain underscores (`bajrang-rest-inn`, not `bajrangrest_inn`).
 
 ---
 
@@ -167,6 +210,13 @@ DATABASE_URL="<neon direct url>" npx prisma migrate deploy
 | 9 | Render startup: `Cannot find package '@billing/pdf'` | `apps/api/package.json` lacked the dep (only worked locally via `scripts/fix-workspace-links.mjs` junctions) | Added `"@billing/pdf": "workspace:*"` + lockfile (commit `350cddc`) |
 | 10 | Render shows 2 paid services | Blueprint read old `render.yaml` / wrong branch | Use `master`; or create a plain Web Service |
 | 11 | Local `docker build -f Dockerfile.api` fails at `corepack prepare pnpm` | Network / antivirus HTTPS interception on this machine (Render unaffected) | Not needed for Render Node runtime; ignore or fix the local network |
+| 12 | Live `POST /api/tenants/register` returns `500 Internal server error` (e.g. `req-8`) | Cause not yet identified; Render logs needed. Suspects: Prisma migrations never run on Neon, or tenant-schema creation failing | Read Render logs around the request id; run `prisma migrate deploy` against Neon |
+| 13 | Public site: `No hotel tenant configured` | `resolveHotelTenant()` required a slug containing "hotel" | Now matches the tenant whose branch has `domainType='hotel'` (`routes/public.ts`, local change — commit + push needed) |
+| 14 | Admin login shows "Connection error — check your internet" | CORS: live API sends no `access-control-allow-origin` for the Vercel origins because `WEB_URL` on Render does not list them | Set `WEB_URL=https://bajrang-rest-inn.vercel.app,https://bajrang-rest-inn-admin.vercel.app` on Render and redeploy |
+| 15 | Vercel opens a "request access / log in" page | Deployment Protection (SSO) on | `npx vercel project protection disable <project> --sso` |
+| 16 | `/admin` is 404 on the website domain | Admin app was not deployed | Section 2.1 |
+| 17 | `/admin/` (trailing slash) shows the website instead of the admin | `/admin/:path*` does not match the bare trailing-slash path | Explicit `/admin/` rewrite |
+| 18 | Admin Vercel install fails on `workspace:*` | npm cannot resolve the pnpm workspace protocol | `npm pkg delete ...@billing/shared` in the install command |
 
 Original service `hotel-api-latest-lfs3.onrender.com` returned **"Service Suspended"**;
 the new service gets a new URL.
@@ -192,10 +242,14 @@ the new service gets a new URL.
 6. Set `WEB_URL` on Render to include the Vercel domain (CORS).
 
 ## 7. Open items
-- [ ] Confirm the Render deploy of commit `350cddc` starts and `/health` is ok
-- [ ] Set `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `WEB_URL` on Render; run migrations on Neon
-- [ ] Update `VITE_API_URL` for the website and `vercel deploy --prod`
-- [ ] Decide on deploying `apps/web` (admin, base `/admin/`)
+- [x] Render deploy of `350cddc` is up; `/health` returns ok
+- [ ] **Set `WEB_URL` on Render** to both Vercel origins (fixes admin "Connection error")
+- [ ] **Fix live registration 500** (need Render logs); then register Bajrang Rest Inn (owner Bajrang, 8291584341)
+- [ ] Commit + push `routes/public.ts` lookup change, `apps/web` + `apps/website` Vercel files
+- [ ] Run `prisma migrate deploy` against Neon if missing tables are confirmed
+- [x] `VITE_API_URL` set to the new API for website and admin, both deployed to production
+- [x] Admin (`apps/web`) deployed to Vercel and routed at `/admin`
+- [ ] Rebrand admin title ("BillBook — Smart Billing")
 - [ ] Fix `db:seed` (`Batch.branchId`)
 - [ ] Uncommitted local edits not yet in git: Vite proxy 3000→3001, website Vercel files/tsconfig, `apps/web` changes
 - [ ] Check that `apps/api/.env` is never committed (it holds real-looking keys; rotate any that were exposed)
