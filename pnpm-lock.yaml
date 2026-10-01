@@ -41,6 +41,9 @@ importers:
       '@billing/gst-engine':
         specifier: workspace:*
         version: link:../../packages/gst-engine
+      '@billing/pdf':
+        specifier: workspace:*
+        version: link:../../packages/pdf
       '@billing/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -8368,9 +8371,7 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - '@babel/preset-env'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.85': {}
 
