@@ -31,6 +31,7 @@ export function LoginPage() {
     queryFn: authApi.devUsers,
     retry: false,
     staleTime: 30_000,
+    enabled: import.meta.env.DEV,   // endpoint only exists in dev; avoid a 404 in prod
   })
 
   const loginMutation = useMutation({
@@ -67,7 +68,7 @@ export function LoginPage() {
             <Store className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-          <p className="text-sm text-gray-500 mt-1">Sign in to your hotel dashboard</p>
+          <p className="text-sm text-gray-600 mt-1">Sign in to your hotel dashboard</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card p-6 space-y-4">
@@ -83,7 +84,7 @@ export function LoginPage() {
               className="input"
               autoFocus
             />
-            <p className="text-xs text-gray-400 mt-1">The phone number your business registered with — same for every staff member.</p>
+            <p className="text-xs text-gray-600 mt-1">The phone number your business registered with — same for every staff member.</p>
           </div>
 
           <div>
@@ -126,10 +127,10 @@ export function LoginPage() {
 
         {!!devUsers?.users?.length && (
           <details className="mt-4">
-            <summary className="text-center text-xs text-gray-400 cursor-pointer select-none">
+            <summary className="text-center text-xs text-gray-600 cursor-pointer select-none">
               Dev credentials ▾
             </summary>
-            <div className="mt-2 text-xs text-gray-500 bg-gray-50 rounded-lg p-3 space-y-1">
+            <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 space-y-1">
               {devUsers.users.map((u) => (
                 <div
                   key={u.phone}
@@ -145,7 +146,7 @@ export function LoginPage() {
                   <span className="font-mono">{u.pin}</span>
                 </div>
               ))}
-              <p className="text-gray-400 pt-1">Click any row to auto-fill credentials. All dev PINs are reset to {devUsers.users[0]?.pin} on load.</p>
+              <p className="text-gray-600 pt-1">Click any row to auto-fill credentials. All dev PINs are reset to {devUsers.users[0]?.pin} on load.</p>
             </div>
           </details>
         )}

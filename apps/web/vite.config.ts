@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
+  base: '/admin/',
   plugins: [react()],
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
@@ -12,7 +13,7 @@ export default defineConfig({
     proxy: {
       // Proxy all /api/* calls to the local API server during development
       '/api': {
-        target:       'http://localhost:3000',
+        target:       'http://localhost:3001',
         changeOrigin: true,
       },
     },

@@ -7,7 +7,8 @@ import toast from 'react-hot-toast'
 import { useAuthStore } from '@/store/auth.store'
 
 export const api = axios.create({
-  baseURL: '/api',          // proxied to localhost:3000 by Vite in dev
+  baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api',
+  // VITE_API_URL unset in dev → relative '/api', proxied to localhost:3000 by Vite (see vite.config.ts)
   timeout: 15_000,
   headers: { 'Content-Type': 'application/json' },
 })

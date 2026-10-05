@@ -1,0 +1,27 @@
+{
+  "framework": "vite",
+  "installCommand": "npm pkg delete dependencies.@billing/shared devDependencies.@billing/shared && npm install",
+  "buildCommand": "npx vite build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/admin/(.*[.].*)",
+      "destination": "/$1"
+    },
+    {
+      "source": "/admin/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/admin",
+      "destination": "/admin/",
+      "permanent": false
+    }
+  ]
+}
