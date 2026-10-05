@@ -34,7 +34,7 @@ export function GalleryPage() {
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16">
         {items.length === 0 ? (
-          <div className="text-center py-16 text-ink-800/40">
+          <div className="text-center py-16 text-ink-800/70">
             <Images className="w-10 h-10 mx-auto mb-3 opacity-40" />
             <p>Photos coming soon.</p>
           </div>
@@ -47,7 +47,7 @@ export function GalleryPage() {
                   onClick={() => setOpenIndex(i)}
                   className="group block w-full mb-4 overflow-hidden break-inside-avoid"
                 >
-                  <img
+                  <img loading="lazy" decoding="async"
                     src={img.url}
                     alt={img.caption ?? `Bajrang Stay Inn, Kodinar — photo ${i + 1}`}
                     onError={handleImageError}
@@ -95,7 +95,7 @@ export function GalleryPage() {
             </button>
           )}
 
-          <img
+          <img loading="lazy" decoding="async"
             src={items[openIndex].url}
             alt={items[openIndex].caption ?? `Bajrang Stay Inn, Kodinar — photo ${openIndex + 1}`}
             onClick={(e) => e.stopPropagation()}

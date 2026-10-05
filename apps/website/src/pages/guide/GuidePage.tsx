@@ -16,7 +16,7 @@ export function GuidePage() {
     return (
       <div className="bg-ivory-50 min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
         <h1 className="font-serif text-3xl text-ink-900 mb-3">Guide not found</h1>
-        <p className="text-ink-800/60 mb-6">This guide may have been moved or removed.</p>
+        <p className="text-ink-800/70 mb-6">This guide may have been moved or removed.</p>
         <Link to="/guide" className="inline-flex items-center gap-2 text-sm font-semibold text-maroon-700 hover:text-gold-600 transition-colors">
           Back to all guides <ArrowUpRight size={13} />
         </Link>

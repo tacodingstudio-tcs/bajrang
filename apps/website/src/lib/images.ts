@@ -3,13 +3,20 @@ import type { SyntheticEvent } from 'react'
 // Real, verified photography for region-specific content — sourced from
 // Wikimedia Commons (CC-BY-SA), not stock placeholders. These make a specific
 // claim ("this is Somnath Temple") so they must be the real thing.
+// Self-hosted, resized WebP copies (public/img/<name>-1280.webp and -640.webp) of the
+// Wikimedia originals, so pages don't pull multi-MB JPEGs from a third party.
 export const regionPhotos = {
-  somnathTemple: 'https://upload.wikimedia.org/wikipedia/commons/c/ce/Somnath_temple.JPG',
-  diuFort:       'https://upload.wikimedia.org/wikipedia/commons/d/d7/Diu_fort%2C_India.JPG',
-  girLion:       'https://upload.wikimedia.org/wikipedia/commons/9/90/Gir_lion-Gir_forest%2Cjunagadh%2Cgujarat%2Cindia.jpeg',
-  mulDwarka:     'https://upload.wikimedia.org/wikipedia/commons/d/d1/Mul_Dwarka_Temple_at_Visavada_Porbandar_Gujarat_India.jpg',
-  kodinar:       'https://upload.wikimedia.org/wikipedia/commons/4/4f/Kodinar%2C_Gujarat_-_India_%283417906908%29.jpg',
-  nagoaBeach:    'https://upload.wikimedia.org/wikipedia/commons/8/8b/Nagoa_Beach%2C_Diu.jpg',
+  somnathTemple: '/img/somnathTemple-1280.webp',
+  diuFort:       '/img/diuFort-1280.webp',
+  girLion:       '/img/girLion-1280.webp',
+  mulDwarka:     '/img/mulDwarka-1280.webp',
+  kodinar:       '/img/kodinar-1280.webp',
+  nagoaBeach:    '/img/nagoaBeach-1280.webp',
+}
+
+/** srcset for a self-hosted region photo, so phones fetch the 640px file. */
+export function regionSrcSet(src: string): string | undefined {
+  return src.startsWith('/img/') ? `${src.replace('-1280', '-640')} 640w, ${src} 1280w` : undefined
 }
 
 // Generic atmospheric photography (hotel interiors, breakfast, lobby) where

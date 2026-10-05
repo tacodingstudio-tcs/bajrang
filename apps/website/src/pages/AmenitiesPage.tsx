@@ -26,7 +26,7 @@ export function AmenitiesPage() {
           right — instead of a header band + icon grid. */}
       <div className="lg:flex">
         <div className="relative h-[45vh] lg:h-[calc(100vh-5rem)] lg:w-[42%] lg:sticky lg:top-20 lg:self-start">
-          <img
+          <img loading="lazy" decoding="async"
             src={photo('hotel,poolside', 900, 1200, 501)}
             onError={handleImageError}
             alt="Poolside area at Bajrang Stay Inn, Kodinar"
@@ -51,7 +51,7 @@ export function AmenitiesPage() {
                 <Icon size={18} className="text-gold-600 mt-1 shrink-0" />
                 <div>
                   <div className="font-serif text-lg text-ink-900">{title}</div>
-                  <p className="text-sm text-ink-800/55 leading-relaxed mt-1">{desc}</p>
+                  <p className="text-sm text-ink-800/70 leading-relaxed mt-1">{desc}</p>
                 </div>
               </div>
             </Reveal>

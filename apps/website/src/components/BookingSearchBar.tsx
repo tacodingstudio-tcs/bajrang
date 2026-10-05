@@ -63,8 +63,9 @@ export function BookingSearchBar() {
             <div className="flex items-center gap-3 px-4 py-4">
               <Search size={16} className="text-gold-600 shrink-0" />
               <div className="w-full">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-800/40 mb-0.5">Room type</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-800/70 mb-0.5">Room type</div>
                 <select
+                  aria-label="Room type"
                   value={roomType}
                   onChange={e => setRoomType(e.target.value)}
                   className="w-full bg-transparent text-sm text-ink-900 focus:outline-none appearance-none"
@@ -80,7 +81,7 @@ export function BookingSearchBar() {
             <div className="flex items-center gap-3 px-4 py-4">
               <Calendar size={16} className="text-gold-600 shrink-0" />
               <div className="w-full">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-800/40 mb-0.5">Check in — Check out</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-800/70 mb-0.5">Check in — Check out</div>
                 <div className="flex items-center gap-2">
                   <label className="relative text-sm text-ink-900 cursor-pointer">
                     {formatDisplayDate(checkIn)}
@@ -90,7 +91,7 @@ export function BookingSearchBar() {
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />
                   </label>
-                  <span className="text-ink-800/30">—</span>
+                  <span className="text-ink-800/70">—</span>
                   <label className="relative text-sm text-ink-900 cursor-pointer">
                     {formatDisplayDate(checkOut)}
                     <input
@@ -106,9 +107,10 @@ export function BookingSearchBar() {
             <div className="flex items-center gap-3 px-4 py-4">
               <Users size={16} className="text-gold-600 shrink-0" />
               <div className="w-full">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-800/40 mb-0.5">Guests</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-800/70 mb-0.5">Guests</div>
                 <div className="flex items-center gap-2">
                   <select
+                    aria-label="Guests"
                     value={guests}
                     onChange={e => setGuests(Number(e.target.value))}
                     className="w-full bg-transparent text-sm text-ink-900 focus:outline-none appearance-none"
@@ -117,7 +119,7 @@ export function BookingSearchBar() {
                       <option key={i} value={i}>{g.adults} Adult{g.adults > 1 ? 's' : ''}, {g.children} Child{g.children !== 1 ? 'ren' : ''} · 1 Room</option>
                     ))}
                   </select>
-                  <ChevronDown size={14} className="text-ink-800/40 shrink-0" />
+                  <ChevronDown size={14} className="text-ink-800/70 shrink-0" />
                 </div>
               </div>
             </div>

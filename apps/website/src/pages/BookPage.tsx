@@ -52,12 +52,12 @@ export function BookPage() {
         <div className="max-w-lg mx-auto px-4 sm:px-6 py-24 text-center">
           <CheckCircle2 size={40} className="text-maroon-700 mx-auto mb-6" />
           <h1 className="font-serif text-2xl text-ink-900 mb-2">Inquiry received</h1>
-          <p className="text-ink-800/60 mb-8">{result.message}</p>
+          <p className="text-ink-800/70 mb-8">{result.message}</p>
           <div className="bg-white border border-maroon-100 shadow-sm p-6 text-left text-sm space-y-3">
-            <div className="flex justify-between"><span className="text-ink-800/50">Reference</span><span className="font-medium">{result.folioNo}</span></div>
-            <div className="flex justify-between"><span className="text-ink-800/50">Room</span><span className="font-medium capitalize">{result.roomType} · #{result.roomNo}</span></div>
-            <div className="flex justify-between"><span className="text-ink-800/50">Nights</span><span className="font-medium">{result.nights}</span></div>
-            <div className="flex justify-between"><span className="text-ink-800/50">Estimated total</span><span className="font-medium">₹{result.totalAmount.toLocaleString('en-IN')}</span></div>
+            <div className="flex justify-between"><span className="text-ink-800/70">Reference</span><span className="font-medium">{result.folioNo}</span></div>
+            <div className="flex justify-between"><span className="text-ink-800/70">Room</span><span className="font-medium capitalize">{result.roomType} · #{result.roomNo}</span></div>
+            <div className="flex justify-between"><span className="text-ink-800/70">Nights</span><span className="font-medium">{result.nights}</span></div>
+            <div className="flex justify-between"><span className="text-ink-800/70">Estimated total</span><span className="font-medium">₹{result.totalAmount.toLocaleString('en-IN')}</span></div>
           </div>
         </div>
       </div>
@@ -136,6 +136,7 @@ export function BookPage() {
             <div>
               <label className={labelClass}>Room type</label>
               <select
+                aria-label="Room type"
                 required value={form.roomType}
                 onChange={e => setForm(f => ({ ...f, roomType: e.target.value }))}
                 className={inputClass}

@@ -118,7 +118,7 @@ export function GuideLayout({
 
           <Reveal delay={140 + stops.length * 90 + 120}>
             <div className="mt-14 pt-8 border-t border-maroon-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <p className="text-sm text-ink-800/60 max-w-sm">
+              <p className="text-sm text-ink-800/70 max-w-sm">
                 Staying at Bajrang Stay Inn puts you within easy reach of all of this — ask our front
                 desk for the latest on timings and road conditions when you check in.
               </p>

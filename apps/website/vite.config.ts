@@ -12,7 +12,7 @@ export default defineConfig({
     proxy: {
       // Only the public, unauthenticated API is reachable from the website.
       '/api/public': {
-        target:       'http://localhost:3000',
+        target:       'http://localhost:3001',
         changeOrigin: true,
       },
     },

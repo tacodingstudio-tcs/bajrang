@@ -24,7 +24,7 @@ function ReviewCard({ name, place, rating, text }: ReviewItem) {
         </div>
         <div>
           <div className="text-sm font-semibold text-ink-900">{name}</div>
-          <div className="text-xs text-ink-800/45">{place}</div>
+          <div className="text-xs text-ink-800/70">{place}</div>
         </div>
       </div>
     </div>
@@ -88,8 +88,11 @@ export function ReviewsCarousel({ reviews, perPage = 3, intervalMs = 6000 }: {
                 type="button"
                 onClick={() => setPage(p)}
                 aria-label={`Show reviews page ${p + 1}`}
-                className={`h-1.5 rounded-full transition-all ${p === page ? 'w-6 bg-gold-500' : 'w-1.5 bg-maroon-200 hover:bg-maroon-300'}`}
-              />
+                aria-current={p === page}
+                className="group flex items-center justify-center w-6 h-6"
+              >
+                <span className={`block h-1.5 rounded-full transition-all ${p === page ? 'w-6 bg-gold-500' : 'w-1.5 bg-maroon-200 group-hover:bg-maroon-300'}`} />
+              </button>
             ))}
           </div>
           <button

@@ -42,14 +42,14 @@ export function RoomDetailPage() {
   const room = rooms?.find((r) => r.roomType === roomType)
 
   if (isLoading) {
-    return <div className="bg-ivory-50 min-h-[60vh] flex items-center justify-center text-ink-800/40">Loading…</div>
+    return <div className="bg-ivory-50 min-h-[60vh] flex items-center justify-center text-ink-800/70">Loading…</div>
   }
 
   if (!room) {
     return (
       <div className="bg-ivory-50 min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
         <h1 className="font-serif text-3xl text-ink-900 mb-3">Room not found</h1>
-        <p className="text-ink-800/60 mb-6">This room type may no longer be available.</p>
+        <p className="text-ink-800/70 mb-6">This room type may no longer be available.</p>
         <Link to="/rooms" className="inline-flex items-center gap-2 text-sm font-semibold text-maroon-700 hover:text-gold-600 transition-colors">
           <ArrowLeft size={14} /> Back to all rooms
         </Link>
@@ -197,9 +197,9 @@ export function RoomDetailPage() {
           <div className="border border-maroon-100 p-6 lg:sticky lg:top-24">
             <div className="text-maroon-700 font-serif text-3xl">
               ₹{room.fromRate.toLocaleString('en-IN')}
-              <span className="text-sm font-sans text-ink-800/40"> / night</span>
+              <span className="text-sm font-sans text-ink-800/70"> / night</span>
             </div>
-            <p className="text-xs text-ink-800/50 mt-1 mb-6">Rate before taxes, subject to availability.</p>
+            <p className="text-xs text-ink-800/70 mt-1 mb-6">Rate before taxes, subject to availability.</p>
             <Link
               to={`/book?roomType=${room.roomType}`}
               className="flex items-center justify-center gap-2 bg-maroon-800 hover:bg-gold-500 text-white hover:text-maroon-900 text-xs font-bold tracking-[0.15em] uppercase py-4 transition-colors"

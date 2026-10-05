@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from 'react'
-import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion'
+import { m, useMotionValue, useSpring, useTransform } from 'framer-motion'
 
 /** Wraps its children in a subtle 3D tilt that follows the cursor —
  * a common "premium" interaction cue on hover, desktop only. */
@@ -25,7 +25,7 @@ export function TiltCard({ children, className = '' }: { children: ReactNode; cl
   function onLeave() { rx.set(0); ry.set(0); scale.set(1) }
 
   return (
-    <motion.div
+    <m.div
       ref={ref}
       onMouseMove={onMouseMove}
       onMouseEnter={onEnter}
@@ -34,6 +34,6 @@ export function TiltCard({ children, className = '' }: { children: ReactNode; cl
       className={className}
     >
       {children}
-    </motion.div>
+    </m.div>
   )
 }

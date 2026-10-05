@@ -45,7 +45,7 @@ export function ContactPage() {
                   <Phone size={16} className="text-gold-600" />
                 </div>
                 <div className="font-serif text-ink-900 mb-1.5">Phone</div>
-                <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="text-sm text-ink-800/60 hover:text-maroon-700">{phone}</a>
+                <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="text-sm text-ink-800/70 hover:text-maroon-700">{phone}</a>
               </div>
             </Reveal>
             <Reveal delay={90}>
@@ -54,7 +54,7 @@ export function ContactPage() {
                   <Mail size={16} className="text-gold-600" />
                 </div>
                 <div className="font-serif text-ink-900 mb-1.5">Email</div>
-                <a href={`mailto:${email}`} className="text-sm text-ink-800/60 hover:text-maroon-700">{email}</a>
+                <a href={`mailto:${email}`} className="text-sm text-ink-800/70 hover:text-maroon-700">{email}</a>
               </div>
             </Reveal>
             <Reveal delay={180}>
@@ -63,7 +63,7 @@ export function ContactPage() {
                   <MapPin size={16} className="text-gold-600" />
                 </div>
                 <div className="font-serif text-ink-900 mb-1.5">Address</div>
-                <span className="text-sm text-ink-800/60">{address}</span>
+                <span className="text-sm text-ink-800/70">{address}</span>
               </div>
             </Reveal>
           </div>

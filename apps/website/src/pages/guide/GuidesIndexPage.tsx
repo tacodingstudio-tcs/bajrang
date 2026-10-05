@@ -42,7 +42,7 @@ export function GuidesIndexPage() {
             <Reveal key={g.slug} delay={i * 100}>
               <Link to={g.path} className="group block h-full">
                 <TiltCard className="relative h-64 overflow-hidden mb-4">
-                  <img
+                  <img loading="lazy" decoding="async"
                     src={g.heroImg}
                     alt={g.heroAlt}
                     onError={handleImageError}
@@ -53,7 +53,7 @@ export function GuidesIndexPage() {
                 <h2 className="font-serif text-lg text-ink-900 group-hover:text-maroon-700 transition-colors mb-1.5">
                   {g.title}
                 </h2>
-                <p className="text-sm text-ink-800/60 leading-relaxed mb-2">{g.excerpt}</p>
+                <p className="text-sm text-ink-800/70 leading-relaxed mb-2">{g.excerpt}</p>
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-gold-600 group-hover:text-maroon-700 transition-colors">
                   Read guide <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                 </span>

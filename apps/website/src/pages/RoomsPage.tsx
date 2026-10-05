@@ -48,8 +48,8 @@ export function RoomsPage() {
       </section>
 
       <div className="bg-ivory-50">
-        {isLoading && <p className="text-ink-800/60 max-w-6xl mx-auto px-4 sm:px-6 py-14">Loading rooms…</p>}
-        {rooms && rooms.length === 0 && <p className="text-ink-800/60 max-w-6xl mx-auto px-4 sm:px-6 py-14">No rooms configured yet.</p>}
+        {isLoading && <p className="text-ink-800/70 max-w-6xl mx-auto px-4 sm:px-6 py-14">Loading rooms…</p>}
+        {rooms && rooms.length === 0 && <p className="text-ink-800/70 max-w-6xl mx-auto px-4 sm:px-6 py-14">No rooms configured yet.</p>}
 
         {/* Alternating editorial rows — image and detail swap sides — rather
             than a uniform card grid. */}
@@ -63,7 +63,7 @@ export function RoomsPage() {
                     to={`/rooms/${r.roomType}`}
                     className={`relative h-72 lg:h-[26rem] overflow-hidden group block ${reversed ? 'lg:order-2' : ''}`}
                   >
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={r.imageUrl || photo(roomTypeTag[r.roomType] ?? 'hotel,room', 900, 700, 400 + i)}
                       onError={handleImageError}
                       alt={`${r.roomType} room, up to ${r.maxOccupancy} guests — Bajrang Stay Inn, Kodinar`}
@@ -79,7 +79,7 @@ export function RoomsPage() {
                     <Link to={`/rooms/${r.roomType}`} className="w-fit">
                       <div className="text-2xl sm:text-3xl font-serif text-ink-900 capitalize hover:text-maroon-700 transition-colors">{r.roomType}</div>
                     </Link>
-                    <div className="flex items-center gap-1.5 text-sm text-ink-800/50 mt-2">
+                    <div className="flex items-center gap-1.5 text-sm text-ink-800/70 mt-2">
                       <Users size={14} /> Up to {r.maxOccupancy} guests · {r.roomCount} rooms available
                     </div>
 
@@ -89,7 +89,7 @@ export function RoomsPage() {
                         .map(k => {
                           const Icon = amenityIcons[k]!
                           return (
-                            <span key={k} className="flex items-center gap-1.5 text-xs text-ink-800/60">
+                            <span key={k} className="flex items-center gap-1.5 text-xs text-ink-800/70">
                               <Icon size={13} className="text-gold-600" /> {amenityLabels[k]}
                             </span>
                           )
@@ -100,7 +100,7 @@ export function RoomsPage() {
                       <div>
                         <div className="text-maroon-700 font-serif text-2xl">
                           ₹{r.fromRate.toLocaleString('en-IN')}
-                          <span className="text-sm font-sans text-ink-800/40"> / night</span>
+                          <span className="text-sm font-sans text-ink-800/70"> / night</span>
                         </div>
                       </div>
                       <Link

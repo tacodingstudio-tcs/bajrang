@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { motion, useMotionValue, useSpring } from 'framer-motion'
+import { m, useMotionValue, useSpring } from 'framer-motion'
 
 /** A soft gold glow that follows the cursor, only visible over elements
  * tagged `data-glow` (dark hero/quote sections) — a subtle "alive" touch
@@ -32,7 +32,7 @@ export function CursorGlow() {
   }, [x, y])
 
   return (
-    <motion.div
+    <m.div
       id="cursor-glow"
       className="pointer-events-none fixed top-0 left-0 z-40 w-[500px] h-[500px] rounded-full opacity-0 transition-opacity duration-300 hidden sm:block"
       style={{

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, MapPin } from 'lucide-react'
 
+import { regionSrcSet } from '../lib/images'
+
 export interface SlideItem {
   img: string
   alt: string
@@ -33,7 +35,14 @@ export function HeroSlider({
         <img
           key={s.place}
           src={s.img}
+          srcSet={regionSrcSet(s.img)}
+          sizes="100vw"
+          width={1280}
+          height={960}
           alt={s.alt}
+          loading={i === 0 ? 'eager' : 'lazy'}
+          fetchPriority={i === 0 ? 'high' : 'auto'}
+          decoding="async"
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[1500ms] ${
             i === index ? 'opacity-100 animate-[kenBurns_7s_ease-out_forwards]' : 'opacity-0'
           }`}

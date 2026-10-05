@@ -1,7 +1,7 @@
 import { Link, NavLink, useLocation, useOutlet } from 'react-router-dom'
 import { Menu, X, Phone, Mail, MapPin, ArrowUpRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { motion, AnimatePresence, useScroll, useSpring } from 'framer-motion'
+import { m, AnimatePresence, useScroll, useSpring } from 'framer-motion'
 import { CursorGlow } from './CursorGlow'
 import { useSeoSettings } from '../lib/useSeoSettings'
 import { useWebsiteContent } from '../lib/useWebsiteContent'
@@ -85,7 +85,7 @@ export function SiteLayout() {
       <CursorGlow />
 
       {/* scroll progress bar */}
-      <motion.div
+      <m.div
         className="fixed top-0 left-0 right-0 h-[2px] bg-gold-500 origin-left z-50"
         style={{ scaleX: progressWidth }}
       />
@@ -162,7 +162,7 @@ export function SiteLayout() {
 
       <main className={`flex-1 ${isHome ? '' : 'pt-16 sm:pt-20'}`}>
         <AnimatePresence mode="wait">
-          <motion.div
+          <m.div
             key={pathname}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -170,7 +170,7 @@ export function SiteLayout() {
             transition={{ duration: 0.35, ease: 'easeOut' }}
           >
             {outlet}
-          </motion.div>
+          </m.div>
         </AnimatePresence>
       </main>
 

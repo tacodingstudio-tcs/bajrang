@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Wifi, Car, Coffee, ShieldCheck, ArrowRight, ArrowUpRight, MapPin, BedDouble, Star, Landmark, ExternalLink, Sparkles } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { motion, useScroll, useTransform } from 'framer-motion'
+import { m, useScroll, useTransform } from 'framer-motion'
 import { api, type RoomTypeSummary } from '../lib/api'
 import { photo, regionPhotos, handleImageError } from '../lib/images'
 import { Reveal } from '../components/Reveal'
@@ -116,9 +116,9 @@ export function HomePage() {
 
       {/* ── Full-bleed hero — slider as background, copy overlaid bottom-left ── */}
       <section ref={heroRef} data-glow className="relative min-h-[92vh] flex items-end overflow-hidden">
-        <motion.div style={{ y: heroY }} className="absolute inset-0 h-[120%]">
+        <m.div style={{ y: heroY }} className="absolute inset-0 h-[120%]">
           <HeroSlider slides={nearbySlides} compact />
-        </motion.div>
+        </m.div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/10" />
         <div className="absolute inset-0 bg-gradient-to-r from-maroon-950/40 via-transparent to-transparent" />
 
@@ -158,7 +158,7 @@ export function HomePage() {
             <Reveal key={label} delay={i * 90} className="py-10 text-center">
               <Icon size={20} className="text-gold-600 mx-auto mb-2" />
               <div className="font-serif text-3xl sm:text-4xl text-maroon-800"><CountUp value={value} /></div>
-              <div className="text-[11px] text-ink-800/50 uppercase tracking-[0.15em] mt-1">{label}</div>
+              <div className="text-[11px] text-ink-800/70 uppercase tracking-[0.15em] mt-1">{label}</div>
             </Reveal>
           ))}
         </div>
@@ -183,7 +183,7 @@ export function HomePage() {
                   <Icon size={20} className="text-gold-300 group-hover:text-maroon-900 transition-colors duration-300" />
                 </div>
                 <div className="font-serif text-lg text-ink-900 mb-1.5">{label}</div>
-                <p className="text-sm text-ink-800/55 leading-relaxed">{desc}</p>
+                <p className="text-sm text-ink-800/70 leading-relaxed">{desc}</p>
               </div>
             </Reveal>
           ))}
@@ -207,7 +207,7 @@ export function HomePage() {
               <Reveal className="lg:col-span-3">
                 <Link to={`/rooms/${featured.roomType}`} className="group block">
                   <TiltCard className="relative h-[28rem] overflow-hidden">
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={featured.imageUrl || photo('hotel,suite', 900, 700, 900)}
                       onError={handleImageError}
                       alt={`${featured.roomType} room, up to ${featured.maxOccupancy} guests — Bajrang Stay Inn, Kodinar`}
@@ -246,7 +246,7 @@ export function HomePage() {
                       className="group relative flex items-center gap-4 p-3 bg-white border border-maroon-100 shadow-sm hover:shadow-lg hover:border-gold-300 hover:-translate-y-0.5 transition-all duration-300"
                     >
                       <div className="w-24 h-24 shrink-0 overflow-hidden relative">
-                        <img
+                        <img loading="lazy" decoding="async"
                           src={r.imageUrl || photo('hotel,bedroom', 200, 200, 910 + i)}
                           onError={handleImageError}
                           alt={`${r.roomType} room, up to ${r.maxOccupancy} guests — Bajrang Stay Inn, Kodinar`}
@@ -255,14 +255,14 @@ export function HomePage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-base font-serif text-ink-900 capitalize">{r.roomType}</div>
-                        <div className="text-xs text-ink-800/50 mt-0.5">Up to {r.maxOccupancy} guests</div>
+                        <div className="text-xs text-ink-800/70 mt-0.5">Up to {r.maxOccupancy} guests</div>
                         <div className="inline-flex items-center gap-1 mt-2 text-[10px] font-semibold text-maroon-700 bg-maroon-50 px-2 py-1 uppercase tracking-wide">
                           Free cancellation
                         </div>
                       </div>
                       <div className="text-right shrink-0">
                         <div className="text-maroon-700 font-serif text-lg">₹{r.fromRate.toLocaleString('en-IN')}</div>
-                        <div className="text-[10px] text-ink-800/40 mb-1.5">/ night</div>
+                        <div className="text-[10px] text-ink-800/70 mb-1.5">/ night</div>
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-gold-600 group-hover:text-maroon-700 transition-colors">
                           View details <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                         </span>
@@ -288,7 +288,7 @@ export function HomePage() {
           <span className="text-gold-600 text-[10px] font-semibold tracking-[0.25em] uppercase">Within reach</span>
           <div className="flex items-end justify-between mt-2">
             <h2 className="font-serif text-3xl sm:text-4xl text-ink-900">Kodinar & beyond</h2>
-            <span className="hidden sm:block text-xs text-ink-800/40 uppercase tracking-[0.15em]">Tap a place →</span>
+            <span className="hidden sm:block text-xs text-ink-800/70 uppercase tracking-[0.15em]">Tap a place →</span>
           </div>
           <Link to="/guide" className="inline-flex items-center gap-1.5 text-sm font-semibold text-maroon-700 hover:text-gold-600 transition-colors mt-3">
             Read our travel guides <ArrowUpRight size={13} />
@@ -305,10 +305,9 @@ export function HomePage() {
                 href={url ?? `https://www.google.com/search?q=${encodeURIComponent(query)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label={`Open ${title} on Google Maps`}
               >
                 <TiltCard className="group relative h-full overflow-hidden">
-                  <img
+                  <img loading="lazy" decoding="async"
                     src={img}
                     alt={`${title} — ${dist} from Bajrang Stay Inn, Kodinar`}
                     onError={handleImageError}

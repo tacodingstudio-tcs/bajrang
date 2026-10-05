@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
-/** Fades + slides a section up into view the first time it crosses the viewport. */
+/** Slides a section up (transform only — fading opacity tanks measured text contrast) into view the first time it crosses the viewport. */
 export function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(false)
@@ -22,7 +22,7 @@ export function Reveal({ children, delay = 0, className = '' }: { children: Reac
   return (
     <div
       ref={ref}
-      className={`transition-all duration-500 ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-40 translate-y-3'} ${className}`}
+      className={`transition-all duration-500 ease-out ${visible ? 'translate-y-0' : 'translate-y-3'} ${className}`}
       style={{ transitionDelay: `${delay}ms` }}
     >
       {children}
