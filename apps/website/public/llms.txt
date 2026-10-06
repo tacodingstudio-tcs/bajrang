@@ -16,6 +16,12 @@
 ## Travel guides
 
 - [Guides](https://bajrang-rest-inn.vercel.app/guide): Nearby places and trip ideas around Kodinar and Somnath.
+- [Visiting Somnath from Kodinar](https://bajrang-rest-inn.vercel.app/guide/visiting-somnath-from-kodinar): Day plan for Somnath Temple, Triveni Sangam and Prachi Tirth.
+- [Gir National Park from Kodinar](https://bajrang-rest-inn.vercel.app/guide/gir-national-park-from-kodinar): How to plan a Gir safari day trip.
+- [A day trip to Diu from Kodinar](https://bajrang-rest-inn.vercel.app/guide/diu-from-kodinar): Diu Fort, Nagoa Beach and what to know about the drive.
+- [Mul Dwarka and Jamjir Waterfall](https://bajrang-rest-inn.vercel.app/guide/mul-dwarka-and-jamjir-waterfall-from-kodinar): Two easy half-day trips close to Kodinar.
+- [Best time to visit Kodinar and Somnath](https://bajrang-rest-inn.vercel.app/guide/best-time-to-visit-kodinar-and-somnath): Season-by-season weather and sightseeing advice.
+- [Three-day Saurashtra coast itinerary](https://bajrang-rest-inn.vercel.app/guide/three-day-saurashtra-coast-itinerary-from-kodinar): A paced three-day plan from one base in Kodinar.
 
 ## Policies
 
