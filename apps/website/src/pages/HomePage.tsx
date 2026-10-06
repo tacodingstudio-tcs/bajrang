@@ -4,7 +4,7 @@ import { Wifi, Car, Coffee, ShieldCheck, ArrowRight, ArrowUpRight, MapPin, BedDo
 import { useQuery } from '@tanstack/react-query'
 import { m, useScroll, useTransform } from 'framer-motion'
 import { api, type RoomTypeSummary } from '../lib/api'
-import { photo, regionPhotos, handleImageError } from '../lib/images'
+import { photo, regionPhotos, regionSrcSet, handleImageError } from '../lib/images'
 import { Reveal } from '../components/Reveal'
 import { BookingSearchBar } from '../components/BookingSearchBar'
 import { HeroSlider, type SlideItem } from '../components/HeroSlider'
@@ -309,6 +309,8 @@ export function HomePage() {
                 <TiltCard className="group relative h-full overflow-hidden">
                   <img loading="lazy" decoding="async"
                     src={img}
+                    srcSet={regionSrcSet(img)}
+                    sizes={big || wide ? '(min-width: 1024px) 50vw, 100vw' : '(min-width: 1024px) 25vw, 50vw'}
                     alt={`${title} — ${dist} from Bajrang Stay Inn, Kodinar`}
                     onError={handleImageError}
                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
