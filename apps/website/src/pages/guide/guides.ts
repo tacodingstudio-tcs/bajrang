@@ -1,5 +1,6 @@
 import { regionPhotos } from '../../lib/images'
 import type { GuideStop } from './GuideLayout'
+import { moreGuides } from './moreGuides'
 
 export interface GuideEntry {
   slug: string
@@ -20,7 +21,7 @@ export interface GuideEntry {
 // Default/seed guide content — used whenever the admin hasn't added or
 // overridden a "guides" entry via the website content API. The public site
 // merges these with `content.guides.items` (admin data wins by slug).
-export const defaultGuides: GuideEntry[] = [
+const baseGuides: GuideEntry[] = [
   {
     slug: 'visiting-somnath-from-kodinar',
     path: '/guide/visiting-somnath-from-kodinar',
@@ -119,3 +120,5 @@ export const defaultGuides: GuideEntry[] = [
     closingText: "Diu is far enough from Kodinar that some guests prefer to stay a night in Diu itself rather than doing the full round trip in one day — worth factoring in if you want a relaxed visit rather than a rushed one. Either way, it's usually a one-destination day given the distance, rather than combined with Somnath or Gir.",
   },
 ]
+
+export const defaultGuides: GuideEntry[] = [...baseGuides, ...moreGuides]

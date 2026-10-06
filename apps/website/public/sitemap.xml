@@ -41,6 +41,21 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://www.bajrangstayinn.example/guide/mul-dwarka-and-jamjir-waterfall-from-kodinar</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://www.bajrangstayinn.example/guide/best-time-to-visit-kodinar-and-somnath</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://www.bajrangstayinn.example/guide/three-day-saurashtra-coast-itinerary-from-kodinar</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://www.bajrangstayinn.example/privacy-policy</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
