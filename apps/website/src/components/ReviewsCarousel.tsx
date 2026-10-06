@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Quote, Star } from 'lucide-react'
 
 export interface ReviewItem {
@@ -31,17 +31,37 @@ function ReviewCard({ name, place, rating, text }: ReviewItem) {
   )
 }
 
-// Auto-advancing carousel — reviews grouped into pages of `perPage`, sliding
-// as a whole page at a time (stacked vertically within a page on mobile,
-// a 3-column row on desktop). Pauses on hover so a review can be read.
+// One review per page on phones (so a long list never lengthens the page), three
+// across from the `sm` breakpoint up.
+function useIsDesktop() {
+  const query = '(min-width: 640px)'
+  const [desktop, setDesktop] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(query)
+    const on = () => setDesktop(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return desktop
+}
+
+// Auto-advancing carousel — reviews grouped into pages (1 per page on mobile,
+// `perPage` on desktop), sliding one page at a time. Pauses on hover/touch so a
+// review can be read; swipe left/right on touch screens.
 export function ReviewsCarousel({ reviews, perPage = 3, intervalMs = 6000 }: {
   reviews: ReviewItem[]
   perPage?: number
   intervalMs?: number
 }) {
-  const pageCount = Math.max(1, Math.ceil(reviews.length / perPage))
+  const isDesktop = useIsDesktop()
+  const per = isDesktop ? perPage : 1
+  const pageCount = Math.max(1, Math.ceil(reviews.length / per))
   const [page, setPage] = useState(0)
   const [paused, setPaused] = useState(false)
+  const touchX = useRef<number | null>(null)
+
+  // keep the current page valid when the layout (per-page) or list changes
+  useEffect(() => { setPage((p) => Math.min(p, pageCount - 1)) }, [pageCount])
 
   useEffect(() => {
     if (paused || pageCount <= 1) return
@@ -55,6 +75,14 @@ export function ReviewsCarousel({ reviews, perPage = 3, intervalMs = 6000 }: {
     <div
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      onTouchStart={(e) => { setPaused(true); touchX.current = e.touches[0]?.clientX ?? null }}
+      onTouchEnd={(e) => {
+        const start = touchX.current
+        const end = e.changedTouches[0]?.clientX
+        touchX.current = null
+        if (start != null && end != null && Math.abs(end - start) > 40) go(end < start ? 1 : -1)
+        setPaused(false)
+      }}
     >
       <div className="overflow-hidden">
         <div
@@ -63,8 +91,8 @@ export function ReviewsCarousel({ reviews, perPage = 3, intervalMs = 6000 }: {
         >
           {Array.from({ length: pageCount }).map((_, p) => (
             <div key={p} className="w-full shrink-0 grid sm:grid-cols-3 gap-6">
-              {reviews.slice(p * perPage, p * perPage + perPage).map((r) => (
-                <ReviewCard key={r.name} {...r} />
+              {reviews.slice(p * per, p * per + per).map((r, i) => (
+                <ReviewCard key={`${r.name}-${p * per + i}`} {...r} />
               ))}
             </div>
           ))}
@@ -81,7 +109,10 @@ export function ReviewsCarousel({ reviews, perPage = 3, intervalMs = 6000 }: {
           >
             <ChevronLeft size={16} />
           </button>
-          <div className="flex items-center gap-2">
+          <div className="sm:hidden text-sm tabular-nums text-ink-800/70" aria-live="polite">
+            {page + 1} / {pageCount}
+          </div>
+          <div className="hidden sm:flex items-center gap-2">
             {Array.from({ length: pageCount }).map((_, p) => (
               <button
                 key={p}
