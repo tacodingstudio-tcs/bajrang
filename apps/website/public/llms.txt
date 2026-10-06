@@ -1,0 +1,23 @@
+# Bajrang Stay Inn
+
+> A quiet hotel stay in Kodinar, Gujarat, minutes from Somnath Temple and the Saurashtra coast. Comfortable rooms, free Wi-Fi, free parking, breakfast and a 24/7 front desk.
+
+## Stay
+
+- [Rooms](https://bajrang-rest-inn.vercel.app/rooms): Room types with photos, amenities and nightly rates.
+- [Amenities](https://bajrang-rest-inn.vercel.app/amenities): What is included with every stay.
+- [Gallery](https://bajrang-rest-inn.vercel.app/gallery): Photos of the hotel and its rooms.
+
+## Book and contact
+
+- [Book a room](https://bajrang-rest-inn.vercel.app/book): Send a booking request for your dates.
+- [Contact](https://bajrang-rest-inn.vercel.app/contact): Address, phone and directions.
+
+## Travel guides
+
+- [Guides](https://bajrang-rest-inn.vercel.app/guide): Nearby places and trip ideas around Kodinar and Somnath.
+
+## Policies
+
+- [Privacy policy](https://bajrang-rest-inn.vercel.app/privacy-policy): How guest data is handled.
+- [Terms and conditions](https://bajrang-rest-inn.vercel.app/terms-conditions): Booking terms.

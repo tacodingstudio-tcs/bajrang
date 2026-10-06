@@ -16,7 +16,7 @@
       "destination": "https://bajrang-rest-inn-admin.vercel.app/admin/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!.*[.]).*)",
       "destination": "/index.html"
     }
   ],
